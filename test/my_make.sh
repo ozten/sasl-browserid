@@ -1,0 +1,1 @@
+gcc -I ../yajl/build/yajl-2.0.3/include/ -L ../yajl/build/yajl-2.0.3/lib/ -lcurl ../yajl/build/yajl-2.0.3/lib/libyajl.so.2.0.3 -o test main.c
