@@ -8,6 +8,7 @@ SASL stands for Simple Authentication and Secruity Layer. It is a standardized A
 [BrowserID](https://browserid.org) is an open web standard for providing a verified email address to websites for authentication.
 
 This project aims to provide a plugin written in C for the popular CMU Cyrus SASL API Implementation. This can be used by:
+
 * OpenLDAP directory server
 * Email servers (CMU, postfix, etc)
 * ??? Tell us other use cases!
@@ -25,6 +26,7 @@ We'd love your help!
 
 ## Requirements ##
 This plugin is under development on i686 Ubuntu 10.04 with:
+
 * Cyrus SASL 2.1.23
 * OpenLDAP 2.4.23
 * libcurl4-dev
