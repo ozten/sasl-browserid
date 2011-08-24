@@ -19,7 +19,7 @@ Assuming you had prefixed your original configure with /home/vagarnt/local/sasl2
 
 5. Restart any client or server applications which use SASL
 
-    sudo cp config/*.conf /usr/lib/sasl2/
+    sudo cp configs/*.conf /usr/lib/sasl2/
     sudo tail -f /var/log/auth.log
     slapd -d 64 -f slapd.conf -h 'ldap://:1389' -n vagrant-slapd
 
