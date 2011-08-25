@@ -1,4 +1,4 @@
-/* BROWSERID SASL plugin
+/* BROWSER-ID SASL plugin
  * $Id: browserid.c,v 1.180 2006/04/26 17:39:26 mel Exp $
  *
  * A Cyrus SASL Mechanism plugin for using browserid.org authentication.
@@ -78,7 +78,7 @@ static int json_string(void *ctx, const unsigned char *ukey, size_t len)
 
   if (strcasecmp(key, "status") == 0) {
     strncpy(parser->status, ukey, len);
-    syslog(LOG_DEBUG, "status=%s", val);
+    syslog(LOG_DEBUG, "status=%s", parser->status);
   } else if (strcasecmp(key, "email") == 0) {
     strncpy(parser->email, ukey, len);
     syslog(LOG_DEBUG, "email=%s", val);
@@ -251,7 +251,7 @@ static int browserid_server_mech_step(void *conn_context,
 
     if (lup != clientinlen) {
 	SETERROR(sparams->utils,
-		 "Oh snap, more data than we were expecting in the BROWSERID plugin\n");
+		 "Oh snap, more data than we were expecting in the BROWSER-ID plugin\n");
 	return SASL_BADPROT;
     }
 
@@ -334,7 +334,7 @@ static int browserid_server_mech_step(void *conn_context,
 	  return result;
 	}
     } else {
-      syslog(LOG_ERR, "No dice, REASON=[%s]", json_ctx->reason);
+        syslog(LOG_ERR, "No dice, STATUS=[%s] REASON=[%s]", json_ctx->status, json_ctx->reason);
       /* TODO sprintf error message with bid_resp->reason  */
       SETERROR(sparams->utils,
 	       "Browserid.org assertion verification failed.");
@@ -374,7 +374,7 @@ static void browserid_server_mech_dispose(void *conn_context,
 static sasl_server_plug_t browserid_server_plugins[] =
 {
     {
-	"BROWSERID",			/* mech_name */
+	"BROWSER-ID",			/* mech_name */
 	1,				/* TODO max_ssf */
 	SASL_SEC_NOPLAINTEXT
 	| SASL_SEC_NOANONYMOUS
@@ -592,7 +592,7 @@ static void browserid_client_mech_dispose(void *conn_context,
 static sasl_client_plug_t browserid_client_plugins[] =
 {
     {
-	"BROWSERID",
+	"BROWSER-ID",
 	1,				/* TODO... max_ssf */
 	SASL_SEC_NOPLAINTEXT
 	| SASL_SEC_NOANONYMOUS
