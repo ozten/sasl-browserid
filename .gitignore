@@ -4,3 +4,18 @@
 *~
 .deps
 .libs
+Makefile
+autom4te.cache
+autoscan.log
+config.guess
+config.h
+config.log
+config.status
+config.sub
+depcomp
+install-sh
+ltmain.sh
+m4/
+missing
+#	Makefile
+stamp-h1

@@ -14,11 +14,37 @@
 #include <saslplug.h>
 #include <saslutil.h>
 
-#include "plugin_common.h"
+
 
 #ifdef macintosh
 #include <sasl_browserid_plugin_decl.h>
 #endif
+
+#ifdef WIN32
+#define PLUG_API __declspec(dllexport)
+#else
+#define PLUG_API extern
+#endif
+
+#define SASL_CLIENT_PLUG_INIT( x ) \
+extern sasl_client_plug_init_t x##_client_plug_init; \
+PLUG_API int sasl_client_plug_init(const sasl_utils_t *utils, \
+                         int maxversion, int *out_version, \
+			 sasl_client_plug_t **pluglist, \
+                         int *plugcount) { \
+        return x##_client_plug_init(utils, maxversion, out_version, \
+				     pluglist, plugcount); \
+}
+
+#define SASL_SERVER_PLUG_INIT( x ) \
+extern sasl_server_plug_init_t x##_server_plug_init; \
+PLUG_API int sasl_server_plug_init(const sasl_utils_t *utils, \
+                         int maxversion, int *out_version, \
+			 sasl_server_plug_t **pluglist, \
+                         int *plugcount) { \
+        return x##_server_plug_init(utils, maxversion, out_version, \
+				     pluglist, plugcount); \
+}
 
 #ifdef WIN32
 BOOL APIENTRY DllMain( HANDLE hModule, 
