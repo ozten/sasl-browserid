@@ -15,6 +15,10 @@
  */
 #include <config.h>
 
+
+
+
+#include <error.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -41,6 +45,9 @@
 
 #include "yajl/yajl_parse.h"
 #include "yajl/yajl_tree.h"
+
+#include <mysql.h>
+#include <mysql/errmsg.h>
 
 struct json_ctx_t {
   char state[64];
@@ -149,6 +156,120 @@ size_t parse_json(void *ptr, size_t size,  size_t  nmemb,  void  *stream) {
   return total_size;
 }
 
+/***************************  Session Section********************************/
+static int check_session(const char *assertion, char *email)
+{
+    printf("MySQL client version: %s\n", mysql_get_client_info());
+    MYSQL *conn;
+    int query_rs;
+    int num_rs;
+    MYSQL_RES *rs;
+    MYSQL_ROW row;
+
+    char assertion_esc[300];
+    char *select_email =
+        "SELECT email FROM browserid_session WHERE digest = MD5('%s')";
+    char select_email_esc[1024];
+
+    char *update_session = "UPDATE browserid_session SET created = NOW() WHERE digest = MD5('%s')";
+    char update_session_esc[1024];
+
+    int rv = 0;
+
+    conn = mysql_init(NULL);
+    if (conn == NULL) {
+        error(1, 1, "Unable to mysql_init");
+    }
+    conn = mysql_real_connect(conn, "localhost", "root", "", "mozillians", NULL, NULL, (void *) 0);
+    if (conn == NULL) {
+        printf("Error %u: %s\n", mysql_errno(conn), mysql_error(conn));
+        error(1, 1, "Unable to connect to mysql server");
+    }
+    mysql_real_escape_string(conn, assertion_esc, assertion, strlen(assertion));
+    sprintf(select_email_esc, select_email, assertion_esc);
+    printf(select_email_esc);
+    printf("\n");
+    if (mysql_query(conn, select_email_esc) == 0) {
+        rs = mysql_store_result(conn);
+        while((row = mysql_fetch_row(rs))) {
+            printf("Email: %s\n", row[0]);
+	    printf("\n");
+            strcpy(email, row[0]);
+            rv = 1;
+	    
+	    /* Touch session */
+	    sprintf(update_session_esc, update_session, assertion_esc);
+	    printf(update_session_esc);
+	    printf("\n");
+	    mysql_query(conn, update_session_esc);
+            break;
+        }
+        if (rs != 0) {
+            mysql_free_result(rs);
+        }
+    } else if (query_rs == CR_UNKNOWN_ERROR) {
+        error(1, 1, "Unkown Error");
+    } else if (query_rs == CR_SERVER_GONE_ERROR ||\
+               query_rs == CR_SERVER_LOST) {
+        error(1, 1, "Executed query, SOL");
+    } else {
+        printf("Error %u: %s\n", mysql_errno(conn), mysql_error(conn));
+        error(1, 1, mysql_error(conn));
+    }
+    mysql_close(conn);
+    return rv;
+}
+
+static int create_session(const char *assertion, const char *email)
+{
+    MYSQL *conn;
+    int query_rs;
+    int num_rs;
+    MYSQL_RES *rs;
+    MYSQL_ROW row;
+
+    char assertion_esc[300];
+    char email_esc[300];
+    char *insert_email =
+        "INSERT INTO browserid_session (digest, assertion, email) VALUES (MD5('%s'), '%s', '%s')";
+    char insert_email_esc[1024];
+    int rv = 0;
+
+    conn = mysql_init(NULL);
+    if (conn == NULL) {
+        error(1, 1, "Unable to mysql_init");
+    }
+    conn = mysql_real_connect(conn, "localhost", "root", "", "mozillians", NULL, NULL, (void *) 0);
+    if (conn == NULL) {
+        printf("Error %u: %s\n", mysql_errno(conn), mysql_error(conn));
+        error(1, 1, "Unable to connect to mysql server");
+    }
+    mysql_real_escape_string(conn, assertion_esc, assertion, strlen(assertion));
+    mysql_real_escape_string(conn, email_esc, email, strlen(email));
+
+    sprintf(insert_email_esc, insert_email, assertion_esc, assertion_esc, email_esc);
+    printf(insert_email_esc);
+    printf("\n");
+    if (mysql_query(conn, insert_email_esc) == 0) {
+        if (mysql_affected_rows(conn) == 1) {
+            printf("Successfully created a session\n");
+            rv = 1;
+        } else {
+            printf("WARN: %u rows affected, expected 1", mysql_affected_rows(conn));
+        }
+    } else if (query_rs == CR_UNKNOWN_ERROR) {
+        error(1, 1, "Unkown Error");
+    } else if (query_rs == CR_SERVER_GONE_ERROR ||\
+               query_rs == CR_SERVER_LOST) {
+        error(1, 1, "Executed query, SOL");
+    } else {
+        printf("Error %u: %s\n", mysql_errno(conn), mysql_error(conn));
+        error(1, 1, mysql_error(conn));
+    }
+    mysql_close(conn);
+    return rv;
+}
+
 /*****************************  Common Section  *****************************/
 
 static const char plugin_id[] = "$Id: browserid.c,v 1.180 2011/08/11 17:00:00 mel Exp $";
@@ -222,6 +343,13 @@ static int browserid_server_mech_step(void *conn_context,
     yajl_handle y_handle;
     struct json_ctx_t *json_ctx;
 
+    /* FROM Session 
+    char assertion[4080]; 
+
+
+    strcpy(assertion, argv[1]);
+     END FROM Session */
+    char email[1024];
 
     syslog(LOG_EMERG, "browserid_server_mech_step clientinlen=%d", clientinlen);
 
@@ -266,83 +394,100 @@ static int browserid_server_mech_step(void *conn_context,
 
     syslog(LOG_EMERG, "Server side, we've got ASSERTION[%s] AUDIENCE[%s]", assertion, audience_copy);
 
-
-    /* BEGIN BrowserID */
-
-    bid_url_fmt = "https://browserid.org/verify?assertion=%s&audience=%s";
-    /*"http://localhost:8001/en-US/media/js/browserid.json";*/
-    
-    sprintf(bid_url, bid_url_fmt, assertion, audience_copy);
-    syslog(LOG_ERR, "bidurl = %s", bid_url);
-
-    json_ctx = malloc(sizeof(struct json_ctx_t));
-    
-    y_handle = yajl_alloc(yajl_cbs, NULL, /* NULL);*/
-			  json_ctx);
-    if (!y_handle) {
-      syslog(LOG_ERR, "Could not alloc YAJL");
-    }
-
-    if (0 != curl_global_init(CURL_GLOBAL_SSL)) {
-      syslog(LOG_ERR, "curl_global_init was non-zero");
-      return -1;
-    }
-
-    handle = curl_easy_init();
-    if (handle == NULL) {
-      syslog(LOG_ERR, "Unable to curl_easy_init");
-    }
-
-    if (0 != curl_easy_setopt(handle, CURLOPT_URL, bid_url))
-      syslog(LOG_DEBUG, "curl setopt url failed");
-
-    if (0 != curl_easy_setopt(handle, CURLOPT_FOLLOWLOCATION, 1))
-      syslog(LOG_DEBUG, "curl setopt follow");
-
-    if (0 != curl_easy_setopt(handle, CURLOPT_USE_SSL, CURLUSESSL_TRY))
-      syslog(LOG_DEBUG, "curl setopt ssl failed");
-
-    if (0 != curl_easy_setopt(handle, CURLOPT_WRITEFUNCTION, parse_json))
-      syslog(LOG_DEBUG, "curl setopt write fn failed");
-
-    if (0 != curl_easy_setopt(handle, CURLOPT_WRITEDATA, y_handle))
-      syslog(LOG_DEBUG, "curl setopt writedata failed");
-
-
-    code = curl_easy_perform(handle);
-    
-    syslog(LOG_DEBUG, "curl perform finished");
-    if (code != 0)
-      syslog(LOG_DEBUG, "curl perform failed");
-
-    yajl_complete_parse(y_handle);
-    yajl_free(y_handle);
-
-    curl_easy_cleanup(handle);
-
-    if (strcasecmp(json_ctx->status, "okay") == 0) {
-      syslog(LOG_DEBUG, "Yes, we're all good! %s %s %s",
-	     json_ctx->email, 
-	     json_ctx->audience,
-	     json_ctx->issuer);
+    /* BEGIN Session */
+    /* given an assertion, do we know the email address? */
+    /* yes - return email 
+       no - no session yet
+       error - something went horribly wrong ;) - Handle errors directly, quit plugin
+    */
+    if (check_session(assertion, &email) == 1) {
+        printf("Got email=%s\n", email);
+        /* set user into the session or whatever... */
         result = sparams->canon_user(sparams->utils->conn,
-				     json_ctx->email, 0,
-				     SASL_CU_AUTHID | SASL_CU_AUTHZID, oparams);
-	if (result != SASL_OK) {
-	  _plug_free_string(sparams->utils, &audience_copy);
-	  return result;
-	}
+                                     email, 0,
+                                     SASL_CU_AUTHID | SASL_CU_AUTHZID, oparams);
     } else {
-        syslog(LOG_ERR, "No dice, STATUS=[%s] REASON=[%s]", json_ctx->status, json_ctx->reason);
-      /* TODO sprintf error message with bid_resp->reason  */
-      SETERROR(sparams->utils,
-	       "Browserid.org assertion verification failed.");
-      return SASL_BADPROT;
-    }
-    
-    free(json_ctx);
-    /* END BrowserID */
+        /* END Sessin */
 
+
+        /* BEGIN BrowserID */
+
+        bid_url_fmt = "https://browserid.org/verify?assertion=%s&audience=%s";
+        /*"http://localhost:8001/en-US/media/js/browserid.json";*/
+    
+        sprintf(bid_url, bid_url_fmt, assertion, audience_copy);
+        syslog(LOG_ERR, "bidurl = %s", bid_url);
+
+        json_ctx = malloc(sizeof(struct json_ctx_t));
+    
+        y_handle = yajl_alloc(yajl_cbs, NULL, /* NULL);*/
+                              json_ctx);
+        if (!y_handle) {
+            syslog(LOG_ERR, "Could not alloc YAJL");
+        }
+
+        if (0 != curl_global_init(CURL_GLOBAL_SSL)) {
+            syslog(LOG_ERR, "curl_global_init was non-zero");
+            return -1;
+        }
+
+        handle = curl_easy_init();
+        if (handle == NULL) {
+            syslog(LOG_ERR, "Unable to curl_easy_init");
+        }
+
+        if (0 != curl_easy_setopt(handle, CURLOPT_URL, bid_url))
+            syslog(LOG_DEBUG, "curl setopt url failed");
+
+        if (0 != curl_easy_setopt(handle, CURLOPT_FOLLOWLOCATION, 1))
+            syslog(LOG_DEBUG, "curl setopt follow");
+
+        if (0 != curl_easy_setopt(handle, CURLOPT_USE_SSL, CURLUSESSL_TRY))
+            syslog(LOG_DEBUG, "curl setopt ssl failed");
+
+        if (0 != curl_easy_setopt(handle, CURLOPT_WRITEFUNCTION, parse_json))
+            syslog(LOG_DEBUG, "curl setopt write fn failed");
+
+        if (0 != curl_easy_setopt(handle, CURLOPT_WRITEDATA, y_handle))
+            syslog(LOG_DEBUG, "curl setopt writedata failed");
+
+
+        code = curl_easy_perform(handle);
+    
+        syslog(LOG_DEBUG, "curl perform finished");
+        if (code != 0)
+            syslog(LOG_DEBUG, "curl perform failed");
+
+        yajl_complete_parse(y_handle);
+        yajl_free(y_handle);
+
+        curl_easy_cleanup(handle);
+
+        if (strcasecmp(json_ctx->status, "okay") == 0) {
+            syslog(LOG_DEBUG, "Yes, we're all good! %s %s %s",
+                   json_ctx->email, 
+                   json_ctx->audience,
+                   json_ctx->issuer);
+            create_session(assertion, json_ctx->email);
+            result = sparams->canon_user(sparams->utils->conn,
+                                         json_ctx->email, 0,
+                                         SASL_CU_AUTHID | SASL_CU_AUTHZID, oparams);
+            if (result != SASL_OK) {
+                _plug_free_string(sparams->utils, &audience_copy);
+                return result;
+            }
+        } else {
+            syslog(LOG_ERR, "No dice, STATUS=[%s] REASON=[%s]", json_ctx->status, json_ctx->reason);
+            /* TODO sprintf error message with bid_resp->reason  */
+            SETERROR(sparams->utils,
+                     "Browserid.org assertion verification failed.");
+            return SASL_BADPROT;
+        }
+
+    
+        free(json_ctx);
+        /* END BrowserID */
+    }
     _plug_free_string(sparams->utils, &audience_copy);
 
 
