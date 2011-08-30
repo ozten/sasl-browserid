@@ -34,7 +34,11 @@ This plugin is under development on i686 Ubuntu 10.04 with:
 * MySQL client libraries for C
 
 ### Ubuntu Tips ###
-1) sudo aptitude install ruby cmake libcurl libcurl-dev libmysqlclient-dev
+1) sudo aptitude install ruby cmake automake libcurl-dev libmysqlclient-dev
+
+ruby and cmake are only needed to compile yajl.
+
+automate is only needed to compile sasl-browserid.
 
 2) Compile [yajl](https://lloyd.github.com/yajl/)
 
@@ -46,11 +50,19 @@ We want yajl 2.0.1 or greater, which most distros haven't packaged.
     ./configure
     sudo make install
 
+You may need to run
+
+    ldconfig /usr/local/lib
+
+You can wait until a later test to figure this out. You'll need it if you see this in /var/log/auth.log
+
+    Aug 30 06:57:40 lucid32 saslpluginviewer: unable to dlopen /usr/lib/sasl2/libbrowserid.so.0: libyajl.so.2: cannot open shared object file: No such file or directory
+
 ## Install SASL-BrowserID ##
 
 Assuming you have the requirements installed, you can:
 
-    configure
+    ./configure
     make
     sudo make install
 
