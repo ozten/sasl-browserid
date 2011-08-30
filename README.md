@@ -36,7 +36,7 @@ This plugin is under development on i686 Ubuntu 10.04 with:
 ### Ubuntu Tips ###
 1) sudo aptitude install ruby cmake libcurl libcurl-dev libmysqlclient-dev
 
-2) Compile (yajl)[https://lloyd.github.com/yajl/]
+2) Compile [yajl](https://lloyd.github.com/yajl/)
 
 We want yajl 2.0.1 or greater, which most distros haven't packaged.
 
@@ -96,7 +96,7 @@ If you've compiled SASL's sample/client and sample/server programs...
 
 
 ## License ##
-plugins/plugin_common.c and plugins/plugin_common.h are copied from (CMU's Cyrus SASL distribution)[http://ftp.andrew.cmu.edu/pub/cyrus-mail/].
+plugins/plugin_common.c and plugins/plugin_common.h are copied from [CMU's Cyrus SASL distribution](http://ftp.andrew.cmu.edu/pub/cyrus-mail/).
 They are copywrite CMU and licensed per file. See files for details.
 
 The rest of this codebase is original and Copywrite Mozilla Corporation 2011.
