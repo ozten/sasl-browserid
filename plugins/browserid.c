@@ -159,7 +159,7 @@ size_t parse_json(void *ptr, size_t size,  size_t  nmemb,  void  *stream) {
 /***************************  Session Section********************************/
 static int check_session(const char *assertion, char *email)
 {
-    printf("MySQL client version: %s\n", mysql_get_client_info());
+    syslog(LOG_DEBUG, "MySQL client version: %s\n", mysql_get_client_info());
     MYSQL *conn;
     int query_rs;
     int num_rs;
@@ -178,29 +178,26 @@ static int check_session(const char *assertion, char *email)
 
     conn = mysql_init(NULL);
     if (conn == NULL) {
-        error(1, 1, "Unable to mysql_init");
+        syslog(LOG_EMERG, "Unable to mysql_init, this can't end well.");
     }
     conn = mysql_real_connect(conn, "localhost", "root", "", "mozillians", NULL, NULL, (void *) 0);
     if (conn == NULL) {
-        printf("Error %u: %s\n", mysql_errno(conn), mysql_error(conn));
-        error(1, 1, "Unable to connect to mysql server");
+        syslog(LOG_EMERG, "Unable to connect to mysql server");
+        syslog(LOG_EMERG, "Error %u: %s", mysql_errno(conn), mysql_error(conn));
     }
     mysql_real_escape_string(conn, assertion_esc, assertion, strlen(assertion));
     sprintf(select_email_esc, select_email, assertion_esc);
-    printf(select_email_esc);
-    printf("\n");
+    syslog(LOG_DEBUG, (select_email_esc));
     if (mysql_query(conn, select_email_esc) == 0) {
         rs = mysql_store_result(conn);
         while((row = mysql_fetch_row(rs))) {
-            printf("Email: %s\n", row[0]);
-	    printf("\n");
+            syslog(LOG_ERR, "msyql email: %s", row[0]);
             strcpy(email, row[0]);
             rv = 1;
 	    
 	    /* Touch session */
 	    sprintf(update_session_esc, update_session, assertion_esc);
-	    printf(update_session_esc);
-	    printf("\n");
+	    syslog(LOG_DEBUG, update_session_esc);
 	    mysql_query(conn, update_session_esc);
             break;
         }
@@ -208,13 +205,12 @@ static int check_session(const char *assertion, char *email)
             mysql_free_result(rs);
         }
     } else if (query_rs == CR_UNKNOWN_ERROR) {
-        error(1, 1, "Unkown Error");
+        syslog(LOG_ERR, "Unkown Error");
     } else if (query_rs == CR_SERVER_GONE_ERROR ||\
                query_rs == CR_SERVER_LOST) {
-        error(1, 1, "Executed query, SOL");
+        syslog(LOG_ERR, "Lost connection to MySQL");
     } else {
-        printf("Error %u: %s\n", mysql_errno(conn), mysql_error(conn));
-        error(1, 1, mysql_error(conn));
+        syslog(LOG_ERR, "Error %u: %s\n", mysql_errno(conn), mysql_error(conn));
     }
     mysql_close(conn);
     return rv;
@@ -241,30 +237,28 @@ static int create_session(const char *assertion, const char *email)
     }
     conn = mysql_real_connect(conn, "localhost", "root", "", "mozillians", NULL, NULL, (void *) 0);
     if (conn == NULL) {
-        printf("Error %u: %s\n", mysql_errno(conn), mysql_error(conn));
-        error(1, 1, "Unable to connect to mysql server");
+        syslog(LOG_EMERG, "Error %u: %s\n", mysql_errno(conn), mysql_error(conn));
+        syslog(LOG_EMERG, "Unable to connect to mysql server");
     }
     mysql_real_escape_string(conn, assertion_esc, assertion, strlen(assertion));
     mysql_real_escape_string(conn, email_esc, email, strlen(email));
 
     sprintf(insert_email_esc, insert_email, assertion_esc, assertion_esc, email_esc);
-    printf(insert_email_esc);
-    printf("\n");
+    syslog(LOG_DEBUG, insert_email_esc);
     if (mysql_query(conn, insert_email_esc) == 0) {
         if (mysql_affected_rows(conn) == 1) {
-            printf("Successfully created a session\n");
+            syslog(LOG_DEBUG, "Successfully created a session\n");
             rv = 1;
         } else {
-            printf("WARN: %u rows affected, expected 1", mysql_affected_rows(conn));
+            syslog(LOG_WARNING, "WARN: %u rows affected, expected 1", mysql_affected_rows(conn));
         }
     } else if (query_rs == CR_UNKNOWN_ERROR) {
-        error(1, 1, "Unkown Error");
+        syslog(LOG_ERR, "Unkown Error");
     } else if (query_rs == CR_SERVER_GONE_ERROR ||\
                query_rs == CR_SERVER_LOST) {
-        error(1, 1, "Executed query, SOL");
+        syslog(LOG_ERR, "Lost Mysql Connection");
     } else {
-        printf("Error %u: %s\n", mysql_errno(conn), mysql_error(conn));
-        error(1, 1, mysql_error(conn));
+        syslog(LOG_ERR, "Error %u: %s\n", mysql_errno(conn), mysql_error(conn));
     }
     mysql_close(conn);
     return rv;
@@ -401,7 +395,7 @@ static int browserid_server_mech_step(void *conn_context,
        error - something went horribly wrong ;) - Handle errors directly, quit plugin
     */
     if (check_session(assertion, &email) == 1) {
-        printf("Got email=%s\n", email);
+        syslog(LOG_ERR, "Got email = %s", email);
         /* set user into the session or whatever... */
         result = sparams->canon_user(sparams->utils->conn,
                                      email, 0,
