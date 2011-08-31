@@ -15,9 +15,6 @@
  */
 #include <config.h>
 
-
-
-
 #include <error.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -180,14 +177,14 @@ static int check_session(const char *assertion, char *email)
     if (conn == NULL) {
         syslog(LOG_EMERG, "Unable to mysql_init, this can't end well.");
     }
-    conn = mysql_real_connect(conn, "localhost", "root", "", "mozillians", NULL, NULL, (void *) 0);
+    conn = mysql_real_connect(conn, "localhost", "root", "", "mozillians", (int)NULL, NULL, 0);
     if (conn == NULL) {
         syslog(LOG_EMERG, "Unable to connect to mysql server");
         syslog(LOG_EMERG, "Error %u: %s", mysql_errno(conn), mysql_error(conn));
     }
     mysql_real_escape_string(conn, assertion_esc, assertion, strlen(assertion));
     sprintf(select_email_esc, select_email, assertion_esc);
-    syslog(LOG_DEBUG, (select_email_esc));
+    syslog(LOG_DEBUG, "Sending %s", select_email_esc);
     if (mysql_query(conn, select_email_esc) == 0) {
         rs = mysql_store_result(conn);
         while((row = mysql_fetch_row(rs))) {
@@ -197,7 +194,7 @@ static int check_session(const char *assertion, char *email)
 	    
 	    /* Touch session */
 	    sprintf(update_session_esc, update_session, assertion_esc);
-	    syslog(LOG_DEBUG, update_session_esc);
+	    syslog(LOG_DEBUG, "Sending %s", update_session_esc);
 	    mysql_query(conn, update_session_esc);
             break;
         }
@@ -235,7 +232,7 @@ static int create_session(const char *assertion, const char *email)
     if (conn == NULL) {
         error(1, 1, "Unable to mysql_init");
     }
-    conn = mysql_real_connect(conn, "localhost", "root", "", "mozillians", NULL, NULL, (void *) 0);
+    conn = mysql_real_connect(conn, "localhost", "root", "", "mozillians", (int)NULL, NULL, 0);
     if (conn == NULL) {
         syslog(LOG_EMERG, "Error %u: %s\n", mysql_errno(conn), mysql_error(conn));
         syslog(LOG_EMERG, "Unable to connect to mysql server");
@@ -244,13 +241,13 @@ static int create_session(const char *assertion, const char *email)
     mysql_real_escape_string(conn, email_esc, email, strlen(email));
 
     sprintf(insert_email_esc, insert_email, assertion_esc, assertion_esc, email_esc);
-    syslog(LOG_DEBUG, insert_email_esc);
+    syslog(LOG_DEBUG, "Sending %s", insert_email_esc);
     if (mysql_query(conn, insert_email_esc) == 0) {
         if (mysql_affected_rows(conn) == 1) {
             syslog(LOG_DEBUG, "Successfully created a session\n");
             rv = 1;
         } else {
-            syslog(LOG_WARNING, "WARN: %u rows affected, expected 1", mysql_affected_rows(conn));
+            syslog(LOG_WARNING, "WARN: %llu rows affected, expected 1", mysql_affected_rows(conn));
         }
     } else if (query_rs == CR_UNKNOWN_ERROR) {
         syslog(LOG_ERR, "Unkown Error");
@@ -394,7 +391,7 @@ static int browserid_server_mech_step(void *conn_context,
        no - no session yet
        error - something went horribly wrong ;) - Handle errors directly, quit plugin
     */
-    if (check_session(assertion, &email) == 1) {
+    if (check_session(assertion, (char *)&email) == 1) {
         syslog(LOG_ERR, "Got email = %s", email);
         /* set user into the session or whatever... */
         result = sparams->canon_user(sparams->utils->conn,
@@ -672,7 +669,7 @@ static int browserid_client_mech_step(void *conn_context,
     /* we should not use oparams... use context instead ? */
     *clientoutlen = (strlen(browser_assertion) + 1 + strlen(browser_audience));
 
-    syslog(LOG_EMERG, " hmm clientoutlen is going to be %d", clientoutlen);
+    syslog(LOG_EMERG, " hmm clientoutlen is going to be %u", *clientoutlen);
 
     result = _plug_buf_alloc(params->utils, &(context->out_buf),
 			     &(context->out_buf_len), *clientoutlen +1);
