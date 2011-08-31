@@ -2,7 +2,7 @@
  * $Id: browserid.c,v 1.180 2006/04/26 17:39:26 mel Exp $
  *
  * A Cyrus SASL Auth Mechanism for BrowserID.
- * 
+ *
  * This plugin implements both the client and server code.
  *
  * A typical senario would be Python ldap code loading the client
@@ -41,120 +41,8 @@
 
 #include <unistd.h>
 
-#include <mysql.h>
-#include <mysql/errmsg.h>
-
+#include <session.h>
 #include <verifier.h>
-
-/***************************  Session Section********************************/
-static int check_session(const char *assertion, char *email)
-{
-    syslog(LOG_DEBUG, "MySQL client version: %s\n", mysql_get_client_info());
-    MYSQL *conn;
-    int query_rs;
-    int num_rs;
-    MYSQL_RES *rs;
-    MYSQL_ROW row;
-
-    char assertion_esc[300];
-    char *select_email =
-        "SELECT email FROM browserid_session WHERE digest = MD5('%s')";
-    char select_email_esc[1024];
-
-    char *update_session = "UPDATE browserid_session SET created = NOW() WHERE digest = MD5('%s')";
-    char update_session_esc[1024];
-
-    int rv = 0;
-
-    conn = mysql_init(NULL);
-    if (conn == NULL) {
-        syslog(LOG_EMERG, "Unable to mysql_init, this can't end well.");
-    }
-    conn = mysql_real_connect(conn, "localhost", "root", "", "mozillians", (int)NULL, NULL, 0);
-    if (conn == NULL) {
-        syslog(LOG_EMERG, "Unable to connect to mysql server");
-        syslog(LOG_EMERG, "Error %u: %s", mysql_errno(conn), mysql_error(conn));
-    }
-    mysql_real_escape_string(conn, assertion_esc, assertion, strlen(assertion));
-    sprintf(select_email_esc, select_email, assertion_esc);
-    syslog(LOG_DEBUG, "Sending %s", select_email_esc);
-    if (mysql_query(conn, select_email_esc) == 0) {
-        rs = mysql_store_result(conn);
-        while((row = mysql_fetch_row(rs))) {
-            syslog(LOG_ERR, "msyql email: %s", row[0]);
-            strcpy(email, row[0]);
-            rv = 1;
-	    
-	    /* Touch session */
-	    sprintf(update_session_esc, update_session, assertion_esc);
-	    syslog(LOG_DEBUG, "Sending %s", update_session_esc);
-	    mysql_query(conn, update_session_esc);
-            break;
-        }
-        if (rs != 0) {
-            mysql_free_result(rs);
-        }
-    } else if (query_rs == CR_UNKNOWN_ERROR) {
-        syslog(LOG_ERR, "Unkown Error");
-    } else if (query_rs == CR_SERVER_GONE_ERROR ||\
-               query_rs == CR_SERVER_LOST) {
-        syslog(LOG_ERR, "Lost connection to MySQL");
-    } else {
-        syslog(LOG_ERR, "Error %u: %s\n", mysql_errno(conn), mysql_error(conn));
-    }
-    mysql_close(conn);
-    return rv;
-}
-
-static int create_session(const char *assertion, const char *email)
-{
-    MYSQL *conn;
-    int query_rs;
-    int num_rs;
-    MYSQL_RES *rs;
-    MYSQL_ROW row;
-
-    char assertion_esc[300];
-    char email_esc[300];
-    char *insert_email =
-        "INSERT INTO browserid_session (digest, assertion, email) VALUES (MD5('%s'), '%s', '%s')";
-    char insert_email_esc[1024];
-    int rv = 0;
-
-    conn = mysql_init(NULL);
-    if (conn == NULL) {
-        error(1, 1, "Unable to mysql_init");
-    }
-    conn = mysql_real_connect(conn, "localhost", "root", "", "mozillians", (int)NULL, NULL, 0);
-    if (conn == NULL) {
-        syslog(LOG_EMERG, "Error %u: %s\n", mysql_errno(conn), mysql_error(conn));
-        syslog(LOG_EMERG, "Unable to connect to mysql server");
-    }
-    mysql_real_escape_string(conn, assertion_esc, assertion, strlen(assertion));
-    mysql_real_escape_string(conn, email_esc, email, strlen(email));
-
-    sprintf(insert_email_esc, insert_email, assertion_esc, assertion_esc, email_esc);
-    syslog(LOG_DEBUG, "Sending %s", insert_email_esc);
-    if (mysql_query(conn, insert_email_esc) == 0) {
-        if (mysql_affected_rows(conn) == 1) {
-            syslog(LOG_DEBUG, "Successfully created a session\n");
-            rv = 1;
-        } else {
-            syslog(LOG_WARNING, "WARN: %llu rows affected, expected 1", mysql_affected_rows(conn));
-        }
-    } else if (query_rs == CR_UNKNOWN_ERROR) {
-        syslog(LOG_ERR, "Unkown Error");
-    } else if (query_rs == CR_SERVER_GONE_ERROR ||\
-               query_rs == CR_SERVER_LOST) {
-        syslog(LOG_ERR, "Lost Mysql Connection");
-    } else {
-        syslog(LOG_ERR, "Error %u: %s\n", mysql_errno(conn), mysql_error(conn));
-    }
-    mysql_close(conn);
-    return rv;
-}
-
-/*****************************  Common Section  *****************************/
 
 static const char plugin_id[] = "$Id: browserid.c,v 1.180 2011/08/11 17:00:00 mel Exp $";
 
@@ -164,241 +52,214 @@ struct context;
 
 static const unsigned short version = 5;
 
-static void browserid_common_mech_dispose(void *conn_context,
-					  const sasl_utils_t *utils)
-{
-    syslog(LOG_EMERG, "browserid_server_mech_dispose");
+/*****************************	Common Section	*****************************/
 
-    return;
+static void browserid_common_mech_dispose(void *conn_context,
+                                          const sasl_utils_t *utils)
+{
+        syslog(LOG_EMERG, "browserid_server_mech_dispose");
+        return;
 }
 
 /**
  * Application is shutting down. Your FREE, FREE!
  */
 static void browserid_common_mech_free(void *glob_context,
-				       const sasl_utils_t *utils)
+                                       const sasl_utils_t *utils)
 {
-    syslog(LOG_EMERG, "browserid_common_mech_free");
-    return;
+        syslog(LOG_DEBUG, "browserid_common_mech_free");
+        return;
 }
 
-/*****************************  Server Section  *****************************/
-
-
+/*****************************	Server Section	*****************************/
 
 /**
- * Called at the start of a new connection. conn_context will persist 
+ * Called at the start of a new connection. conn_context will persist
  * throught the request. Doesn't send any data to the server.
  */
 static int browserid_server_mech_new(void *glob_context,
-				     sasl_server_params_t * sparams,
-				     const char *challenge __attribute__((unused)),
-				     unsigned challen __attribute__((unused)),
-				     void **conn_context)
+                                     sasl_server_params_t * sparams,
+                                     const char *challenge __attribute__((unused)),
+                                     unsigned challen __attribute__((unused)),
+                                     void **conn_context)
 {
-    syslog(LOG_EMERG, "browserid_server_mech_new");
-
-    return SASL_OK;
+        syslog(LOG_DEBUG, "browserid_server_mech_new");
+        return SASL_OK;
 }
 
-
 /**
- * Core of the server plugin. 
+ * Core of the server plugin.
  */
 static int browserid_server_mech_step(void *conn_context,
-				      sasl_server_params_t *sparams,
-				      const char *clientin,
-				      unsigned clientinlen,
-				      const char **serverout,
-				      unsigned *serveroutlen,
-				      sasl_out_params_t *oparams)
+                                      sasl_server_params_t *sparams,
+                                      const char *clientin,
+                                      unsigned clientinlen,
+                                      const char **serverout,
+                                      unsigned *serveroutlen,
+                                      sasl_out_params_t *oparams)
 {
-    const char *assertion;
-    const char *audience;
-    unsigned audience_len;
-    unsigned lup=0;
-    int result;
-    char *audience_copy;
+        const char *assertion;
+        const char *audience;
+        unsigned audience_len;
+        unsigned lup=0;
+        int result;
+        char *audience_copy;
+        struct json_ctx_t *json_ctx;
+        char email[1024];
 
+        syslog(LOG_DEBUG, "browserid_server_mech_step clientinlen=%d", clientinlen);
 
+        /* should have received assertion NUL audience */
 
-    struct json_ctx_t *json_ctx;
+        /* get assertion */
+        assertion = clientin;
+        syslog(LOG_DEBUG, "Assertion: [%s]", assertion);
 
-    /* FROM Session 
-    char assertion[4080]; 
+        while ((lup < clientinlen) && (clientin[lup] != 0)) ++lup;
 
-
-    strcpy(assertion, argv[1]);
-     END FROM Session */
-    char email[1024];
-
-    syslog(LOG_EMERG, "browserid_server_mech_step clientinlen=%d", clientinlen);
-
-
-    /* should have received assertion NUL audience */
-
-    /* get assertion */
-    assertion = clientin;
-    syslog(LOG_EMERG, "Assertion: [%s]", assertion);
-
-    while ((lup < clientinlen) && (clientin[lup] != 0)) ++lup;
-
-    if (lup >= clientinlen) {
-	SETERROR(sparams->utils, "Can only find browserid assertion (no audience)");
-	return SASL_BADPROT;
-    }
-
-    /* get audience */
-    ++lup;
-    audience = clientin + lup;
-    while ((lup < clientinlen) && (clientin[lup] != 0)) ++lup;
-
-    audience_len = (unsigned) (clientin + lup - audience);
-
-    syslog(LOG_EMERG, "lup = %d clientinlen = %d", lup, clientinlen);
-
-    if (lup != clientinlen) {
-	SETERROR(sparams->utils,
-		 "Oh snap, more data than we were expecting in the BROWSER-ID plugin\n");
-	return SASL_BADPROT;
-    }
-
-    /* Ensure null terminated */
-    audience_copy = sparams->utils->malloc(audience_len + 1);    
-    if (audience_copy == NULL) {
-	MEMERROR(sparams->utils);
-	return SASL_NOMEM;
-    }
-
-    strncpy(audience_copy, audience, audience_len);
-    audience_copy[audience_len] = '\0';
-
-    syslog(LOG_EMERG, "Server side, we've got ASSERTION[%s] AUDIENCE[%s]", assertion, audience_copy);
-
-    /* BEGIN Session */
-    /* given an assertion, do we know the email address? */
-    /* yes - return email 
-       no - no session yet
-       error - something went horribly wrong ;) - Handle errors directly, quit plugin
-    */
-    if (check_session(assertion, (char *)&email) == 1) {
-        syslog(LOG_ERR, "Got email = %s", email);
-        /* set user into the session or whatever... */
-        result = sparams->canon_user(sparams->utils->conn,
-                                     email, 0,
-                                     SASL_CU_AUTHID | SASL_CU_AUTHZID, oparams);
-    } else {
-        /* END Sessin */
-
-
-        /* BEGIN BrowserID */
-
-
-        json_ctx = malloc(sizeof(struct json_ctx_t));
-
-        browserid_verify(json_ctx, assertion, audience_copy);
-
-        if (strcasecmp(json_ctx->status, "okay") == 0) {
-            syslog(LOG_DEBUG, "Yes, we're all good! %s %s %s",
-                   json_ctx->email, 
-                   json_ctx->audience,
-                   json_ctx->issuer);
-            create_session(assertion, json_ctx->email);
-            result = sparams->canon_user(sparams->utils->conn,
-                                         json_ctx->email, 0,
-                                         SASL_CU_AUTHID | SASL_CU_AUTHZID, oparams);
-            if (result != SASL_OK) {
-                _plug_free_string(sparams->utils, &audience_copy);
-                free(json_ctx);
-                return result;
-            }
-        } else {
-            syslog(LOG_ERR, "No dice, STATUS=[%s] REASON=[%s]", json_ctx->status, json_ctx->reason);
-            /* TODO sprintf error message with bid_resp->reason  */
-            SETERROR(sparams->utils,
-                     "Browserid.org assertion verification failed.");
-            _plug_free_string(sparams->utils, &audience_copy);
-            free(json_ctx);
-            return SASL_BADPROT;
+        if (lup >= clientinlen) {
+                SETERROR(sparams->utils, "Can only find browserid assertion (no audience)");
+                return SASL_BADPROT;
         }
 
-    
-        free(json_ctx);
-        /* END BrowserID */
-    }
-    _plug_free_string(sparams->utils, &audience_copy);
+        /* get audience */
+        ++lup;
+        audience = clientin + lup;
+        while ((lup < clientinlen) && (clientin[lup] != 0)) ++lup;
+
+        audience_len = (unsigned) (clientin + lup - audience);
+
+        syslog(LOG_DEBUG, "lup = %d clientinlen = %d", lup, clientinlen);
+
+        if (lup != clientinlen) {
+                SETERROR(sparams->utils,
+                         "Oh snap, more data than we were expecting in the BROWSER-ID plugin\n");
+                return SASL_BADPROT;
+        }
+
+        /* Ensure null terminated */
+        audience_copy = sparams->utils->malloc(audience_len + 1);
+        if (audience_copy == NULL) {
+                MEMERROR(sparams->utils);
+                return SASL_NOMEM;
+        }
+
+        strncpy(audience_copy, audience, audience_len);
+        audience_copy[audience_len] = '\0';
+
+        syslog(LOG_DEBUG, "Server side, we've got ASSERTION[%s] AUDIENCE[%s]",
+               assertion, audience_copy);
 
 
-    /* set oparams */
-    oparams->doneflag = 1;
-    oparams->mech_ssf = 0;
-    oparams->maxoutbuf = 0;
-    oparams->encode_context = NULL;
-    oparams->encode = NULL;
-    oparams->decode_context = NULL;
-    oparams->decode = NULL;
-    oparams->param_version = 0;
+        if (check_session(assertion, (char *)&email) == 1) {
+                syslog(LOG_DEBUG, "Got email = %s", email);
+                /* set user into the session or whatever... */
+                result = sparams->canon_user(sparams->utils->conn,
+                                             email, 0,
+                                             SASL_CU_AUTHID | SASL_CU_AUTHZID, oparams);
+        } else {
+                json_ctx = malloc(sizeof(struct json_ctx_t));
+
+                browserid_verify(json_ctx, assertion, audience_copy);
+
+                if (strcasecmp(json_ctx->status, "okay") == 0) {
+                        syslog(LOG_DEBUG, "Yes, we're all good! %s %s %s",
+                               json_ctx->email,
+                               json_ctx->audience,
+                               json_ctx->issuer);
+                        create_session(assertion, json_ctx->email);
+                        result = sparams->canon_user(sparams->utils->conn,
+                                                     json_ctx->email, 0,
+                                                     SASL_CU_AUTHID | SASL_CU_AUTHZID, oparams);
+                        if (result != SASL_OK) {
+                                _plug_free_string(sparams->utils, &audience_copy);
+                                free(json_ctx);
+                                return result;
+                        }
+                } else {
+                        syslog(LOG_ERR, "No dice, STATUS=[%s] REASON=[%s]", json_ctx->status, json_ctx->reason);
+                        /* TODO sprintf error message with bid_resp->reason  */
+                        SETERROR(sparams->utils,
+                                 "Browserid.org assertion verification failed.");
+                        _plug_free_string(sparams->utils, &audience_copy);
+                        free(json_ctx);
+                        return SASL_BADPROT;
+                }
 
 
-    return SASL_OK;
+                free(json_ctx);
+        }
+        _plug_free_string(sparams->utils, &audience_copy);
+
+
+        /* set oparams */
+        oparams->doneflag = 1;
+        oparams->mech_ssf = 0;
+        oparams->maxoutbuf = 0;
+        oparams->encode_context = NULL;
+        oparams->encode = NULL;
+        oparams->decode_context = NULL;
+        oparams->decode = NULL;
+        oparams->param_version = 0;
+        return SASL_OK;
 }
 
 /**
  * This request is over, connection coming to an end.
  */
 static void browserid_server_mech_dispose(void *conn_context,
-					  const sasl_utils_t *utils)
+                                          const sasl_utils_t *utils)
 {
-    syslog(LOG_EMERG, "browserid_server_mech_dispose");
-    return;
+        syslog(LOG_DEBUG, "browserid_server_mech_dispose");
+        return;
 }
 
 static sasl_server_plug_t browserid_server_plugins[] =
 {
     {
-	"BROWSER-ID",			/* mech_name */
-	1,				/* TODO max_ssf */
-	SASL_SEC_NOPLAINTEXT
-	| SASL_SEC_NOANONYMOUS
-	| SASL_SEC_MUTUAL_AUTH,		/* security_flags */
-	SASL_FEAT_ALLOWS_PROXY,		/* features */
-	NULL,            		/* glob_context */
-	&browserid_server_mech_new,	/* mech_new */
-	&browserid_server_mech_step,	/* mech_step */
-	&browserid_server_mech_dispose,	/* mech_dispose */
-	&browserid_common_mech_free,	/* mech_free */
-	NULL,				/* setpass */
-	NULL,				/* user_query */
-	NULL,				/* idle */
-	NULL,				/* mech avail */
-	NULL				/* spare */
+        "BROWSER-ID",			/* mech_name */
+        1,				/* TODO max_ssf */
+        SASL_SEC_NOPLAINTEXT
+        | SASL_SEC_NOANONYMOUS
+        | SASL_SEC_MUTUAL_AUTH,		/* security_flags */
+        SASL_FEAT_ALLOWS_PROXY,		/* features */
+        NULL,                           /* glob_context */
+        &browserid_server_mech_new,	/* mech_new */
+        &browserid_server_mech_step,	/* mech_step */
+        &browserid_server_mech_dispose,	/* mech_dispose */
+        &browserid_common_mech_free,	/* mech_free */
+        NULL,				/* setpass */
+        NULL,				/* user_query */
+        NULL,				/* idle */
+        NULL,				/* mech avail */
+        NULL				/* spare */
     }
 };
 
 int browserid_server_plug_init(sasl_utils_t *utils,
-			       int maxversion,
-			       int *out_version,
-			       sasl_server_plug_t **pluglist,
-			       int *plugcount) 
+                               int maxversion,
+                               int *out_version,
+                               sasl_server_plug_t **pluglist,
+                               int *plugcount)
 {
-    openlog("browserid-server", LOG_NDELAY, LOG_AUTH);
-    syslog(LOG_EMERG, "browserid_server_plug_init");
-    if (maxversion < SASL_SERVER_PLUG_VERSION) {
-	SETERROR( utils, "ANONYMOUS version mismatch" );
-	return SASL_BADVERS;
-    }
-    
-    *out_version = SASL_SERVER_PLUG_VERSION;
-    *pluglist = browserid_server_plugins;
-    *plugcount = 1;  
-    return SASL_OK;
+        openlog("browserid-server", LOG_NDELAY, LOG_AUTH);
+        syslog(LOG_DEBUG, "browserid_server_plug_init");
+        if (maxversion < SASL_SERVER_PLUG_VERSION) {
+                SETERROR( utils, "ANONYMOUS version mismatch" );
+                return SASL_BADVERS;
+        }
+
+        *out_version = SASL_SERVER_PLUG_VERSION;
+        *pluglist = browserid_server_plugins;
+        *plugcount = 1;
+        return SASL_OK;
 }
 
 /*****************************  Client Section  *****************************/
 
 typedef struct client_context {
-    char *out_buf;
-    unsigned out_buf_len;
+        char *out_buf;
+        unsigned out_buf_len;
 } client_context_t;
 
 /**
@@ -406,211 +267,208 @@ typedef struct client_context {
  * throught the client lifecycle. Doesn't send any data to the client.
  */
 static int browserid_client_mech_new(void *glob_context,
-				     sasl_client_params_t * params,
-				     void **conn_context)
+                                     sasl_client_params_t * params,
+                                     void **conn_context)
 {
-    syslog(LOG_EMERG, "browserid_client_mech_new");
-    client_context_t *context;
+        syslog(LOG_DEBUG, "browserid_client_mech_new");
+        client_context_t *context;
 
-    context = params->utils->malloc(sizeof(client_context_t));
-    if (context == NULL) {
-	MEMERROR( params->utils );
-	return SASL_NOMEM;
-    }
-    
-    memset(context, 0, sizeof(client_context_t));
-    
-    *conn_context = context;
-    return SASL_OK;
+        context = params->utils->malloc(sizeof(client_context_t));
+        if (context == NULL) {
+                MEMERROR( params->utils );
+                return SASL_NOMEM;
+        }
+
+        memset(context, 0, sizeof(client_context_t));
+
+        *conn_context = context;
+        return SASL_OK;
 }
 
 /**
- * Core of the client plugin. Does client side authentication... which 
+ * Core of the client plugin. Does client side authentication... which
  * is none. Probably we need a two step where we get the server
  * to figure out the hard stuff.
  */
 static int browserid_client_mech_step(void *conn_context,
-				      sasl_client_params_t *params,
-				      const char *serverin,
-				      unsigned serverinlen,
-				      sasl_interact_t **prompt_need,
-				      const char **clientout,
-				      unsigned *clientoutlen,
-				      sasl_out_params_t *oparams)
+                                      sasl_client_params_t *params,
+                                      const char *serverin,
+                                      unsigned serverinlen,
+                                      sasl_interact_t **prompt_need,
+                                      const char **clientout,
+                                      unsigned *clientoutlen,
+                                      sasl_out_params_t *oparams)
 {
-    client_context_t *context = (client_context_t *) conn_context;
-    const char *user = NULL, *authid = "ozten", *browser_assertion = NULL, *browser_audience = NULL;
-    int browser_assertion_result = SASL_OK;
-    int browser_audience_result = SASL_OK;
-    int result;
-    char *p;
+        client_context_t *context = (client_context_t *) conn_context;
+        const char *user = NULL, *authid = "ozten", *browser_assertion = NULL, *browser_audience = NULL;
+        int browser_assertion_result = SASL_OK;
+        int browser_audience_result = SASL_OK;
+        int result;
+        char *p;
 
-    syslog(LOG_EMERG, "browserid_client_mech_new");
+        syslog(LOG_DEBUG, "browserid_client_mech_new");
 
-    if (!params
-	|| !clientout
-	|| !clientoutlen
-	|| !oparams) {
-      PARAMERROR( params->utils );
-	return SASL_BADPARAM;
-    }
+        if (!params || !clientout || !clientoutlen || !oparams) {
+                PARAMERROR( params->utils );
+                return SASL_BADPARAM;
+        }
 
-    /* try to get the assertion */    
-    if (oparams->authid == NULL) {
-      /* TODO get_authid should be get_assertion */
-	browser_assertion_result = _plug_get_userid(params->utils, &browser_assertion, prompt_need);
-	
-	if ((browser_assertion_result != SASL_OK) && (browser_assertion_result != SASL_INTERACT))
-	    return browser_assertion_result;
-    }
+        /* try to get the assertion */
+        if (oparams->authid == NULL) {
+                /* TODO get_authid should be get_assertion */
+                browser_assertion_result = _plug_get_userid(params->utils,
+                                                            &browser_assertion,
+                                                            prompt_need);
 
-    /* try to get the audience */
-    if (oparams->user == NULL) {
-      /* TODO get_authid should be get_audience */
-	browser_audience_result = _plug_get_authid(params->utils, &browser_audience, prompt_need);
-	
-	if ((browser_audience_result != SASL_OK) && (browser_audience_result != SASL_INTERACT))
-	    return browser_audience_result;
-    }
+                if ((browser_assertion_result != SASL_OK) && \
+                    (browser_assertion_result != SASL_INTERACT)) {
+                        return browser_assertion_result;
+                }
+        }
 
-    /* free prompts we got */
-    if (prompt_need && *prompt_need) {
-	params->utils->free(*prompt_need);
-	*prompt_need = NULL;
-    }
+        /* try to get the audience */
+        if (oparams->user == NULL) {
+                /* TODO get_authid should be get_audience */
+                browser_audience_result = _plug_get_authid(params->utils, &browser_audience, prompt_need);
 
-    /* if there are prompts not filled in */
-    if ((browser_audience_result == SASL_INTERACT) || (browser_assertion_result == SASL_INTERACT)) {
-	/* make the prompt list, hijack user and auth slots */
-	result =
-	    _plug_make_prompts(params->utils, prompt_need,
-			       browser_assertion_result == SASL_INTERACT ?
-			       "Please enter your assertion" : NULL,
-			       NULL,                               
-			       browser_audience_result == SASL_INTERACT ?
-			       "Please enter your interwebs (example.com)" : NULL, 
-                               NULL,
-                               /* pass prompt, default */
-			       NULL, NULL,
-                               /* echo challange, prompt, default */
-			       NULL, NULL, NULL, 
-                               /* realm challange, prompt, default */
-                               NULL, NULL, NULL);
-	if (result != SASL_OK) goto cleanup;
-	return SASL_INTERACT;
-    }
-    
-    syslog(LOG_EMERG, "YO ASSERTION=[%s] AUDIENCE=[%s]", browser_assertion, browser_audience);
-    
-    /* TODO ... I think this is SASL Abuse. This should come as a second step. */
-    params->canon_user(params->utils->conn, browser_assertion, 0,
-			SASL_CU_AUTHZID, oparams);
-    params->canon_user(params->utils->conn, browser_audience, 0,
-			SASL_CU_AUTHID, oparams);
+                if ((browser_audience_result != SASL_OK) && \
+                    (browser_audience_result != SASL_INTERACT)) {
+                        return browser_audience_result;
+                }
+        }
 
-    if (result != SASL_OK) goto cleanup;
+        /* free prompts we got */
+        if (prompt_need && *prompt_need) {
+                params->utils->free(*prompt_need);
+                *prompt_need = NULL;
+        }
 
-    syslog(LOG_EMERG, "Got passed canon_user");
+        /* if there are prompts not filled in */
+        if ((browser_audience_result == SASL_INTERACT) || \
+            (browser_assertion_result == SASL_INTERACT)) {
+                /* make the prompt list, hijack user and auth slots */
+                result =
+                    _plug_make_prompts(params->utils, prompt_need,
+                                       browser_assertion_result == SASL_INTERACT ?
+                                       "Please enter your assertion" : NULL,
+                                       NULL,
+                                       browser_audience_result == SASL_INTERACT ?
+                                       "Please enter your interwebs (example.com)" : NULL,
+                                       NULL,
+                                       /* pass prompt, default */
+                                       NULL, NULL,
+                                       /* echo challange, prompt, default */
+                                       NULL, NULL, NULL,
+                                       /* realm challange, prompt, default */
+                                       NULL, NULL, NULL);
+                if (result != SASL_OK) goto cleanup;
+                return SASL_INTERACT;
+        }
 
-    /* send assertion NUL audience NUL */
-    /* we should not use oparams... use context instead ? */
-    *clientoutlen = (strlen(browser_assertion) + 1 + strlen(browser_audience));
+        syslog(LOG_DEBUG, "YO ASSERTION=[%s] AUDIENCE=[%s]", browser_assertion, browser_audience);
 
-    syslog(LOG_EMERG, " hmm clientoutlen is going to be %u", *clientoutlen);
+        /* TODO ... I think this is SASL Abuse. This should come as a second step. */
+        params->canon_user(params->utils->conn, browser_assertion, 0,
+                           SASL_CU_AUTHZID, oparams);
+        params->canon_user(params->utils->conn, browser_audience, 0,
+                           SASL_CU_AUTHID, oparams);
 
-    result = _plug_buf_alloc(params->utils, &(context->out_buf),
-			     &(context->out_buf_len), *clientoutlen +1);
-    if (result != SASL_OK) goto cleanup;
+        if (result != SASL_OK) goto cleanup;
 
-    memset(context->out_buf, 0, *clientoutlen + 1);
-    p = context->out_buf;
-    if (browser_assertion && *browser_assertion) {
-        memcpy(p, oparams->user, oparams->ulen);
-	p += oparams->ulen;
-    }
-    memcpy(++p, oparams->authid, oparams->alen);
-    p += oparams->alen;
+        syslog(LOG_DEBUG, "Got passed canon_user");
 
-    *clientout = context->out_buf;
+        /* send assertion NUL audience NUL */
+        /* we should not use oparams... use context instead ? */
+        *clientoutlen = (strlen(browser_assertion) + 1 + strlen(browser_audience));
 
+        syslog(LOG_DEBUG, "clientoutlen is going to be %u", *clientoutlen);
 
-    /* server step here? */
+        result = _plug_buf_alloc(params->utils, &(context->out_buf),
+                                 &(context->out_buf_len), *clientoutlen +1);
+        if (result != SASL_OK) goto cleanup;
 
-    /* set oparams */
-    oparams->doneflag = 1;
-    oparams->mech_ssf = 0;
-    oparams->maxoutbuf = 0;
-    oparams->encode_context = NULL;
-    oparams->encode = NULL;
-    oparams->decode_context = NULL;
-    oparams->decode = NULL;
-    oparams->param_version = 0;
+        memset(context->out_buf, 0, *clientoutlen + 1);
+        p = context->out_buf;
+        if (browser_assertion && *browser_assertion) {
+                memcpy(p, oparams->user, oparams->ulen);
+                p += oparams->ulen;
+        }
+        memcpy(++p, oparams->authid, oparams->alen);
+        p += oparams->alen;
 
+        *clientout = context->out_buf;
 
-    /* write to clientout */
+        oparams->doneflag = 1;
+        oparams->mech_ssf = 0;
+        oparams->maxoutbuf = 0;
+        oparams->encode_context = NULL;
+        oparams->encode = NULL;
+        oparams->decode_context = NULL;
+        oparams->decode = NULL;
+        oparams->param_version = 0;
 
-  cleanup:
+ cleanup:
 
-    /*return result;*/
-    return SASL_OK;
+        /*return result;*/
+        return SASL_OK;
 }
 
 /**
  * Client side connection is no longer in use.
  */
 static void browserid_client_mech_dispose(void *conn_context,
-					  const sasl_utils_t *utils)
+                                          const sasl_utils_t *utils)
 {
-    syslog(LOG_EMERG, "browserid_client_mech_dispose");
+        syslog(LOG_DEBUG, "browserid_client_mech_dispose");
 
-    client_context_t *context = (client_context_t *) conn_context;
+        client_context_t *context = (client_context_t *) conn_context;
 
-    if (!context) return;
+        if (!context) return;
 
-    if (context->out_buf) utils->free(context->out_buf);
+        if (context->out_buf) utils->free(context->out_buf);
 
-    utils->free(context);
+        utils->free(context);
 
-    return;
+        return;
 }
 
 static sasl_client_plug_t browserid_client_plugins[] =
 {
     {
-	"BROWSER-ID",
-	1,				/* TODO... max_ssf */
-	SASL_SEC_NOPLAINTEXT
-	| SASL_SEC_NOANONYMOUS
-	| SASL_SEC_MUTUAL_AUTH,		/* security_flags */
-	SASL_FEAT_NEEDSERVERFQDN
-	| SASL_FEAT_ALLOWS_PROXY, 	/* features */
-	NULL,				/* required_prompts */
-	NULL,		                /* glob_context */
-	&browserid_client_mech_new,	/* mech_new */
-	&browserid_client_mech_step,	/* mech_step */
-	&browserid_client_mech_dispose,	/* mech_dispose */
-	&browserid_common_mech_free,	/* mech_free */
-	NULL,				/* idle */
-	NULL,				/* spare1 */
-	NULL				/* spare2 */
+        "BROWSER-ID",
+        1,				/* TODO... max_ssf */
+        SASL_SEC_NOPLAINTEXT
+        | SASL_SEC_NOANONYMOUS
+        | SASL_SEC_MUTUAL_AUTH,		/* security_flags */
+        SASL_FEAT_NEEDSERVERFQDN
+        | SASL_FEAT_ALLOWS_PROXY,       /* features */
+        NULL,				/* required_prompts */
+        NULL,                           /* glob_context */
+        &browserid_client_mech_new,	/* mech_new */
+        &browserid_client_mech_step,	/* mech_step */
+        &browserid_client_mech_dispose,	/* mech_dispose */
+        &browserid_common_mech_free,	/* mech_free */
+        NULL,				/* idle */
+        NULL,				/* spare1 */
+        NULL				/* spare2 */
     }
 };
 
 int browserid_client_plug_init(sasl_utils_t *utils,
-			       int maxversion,
-			       int *out_version,
-			       sasl_client_plug_t **pluglist,
-			       int *plugcount)
+                               int maxversion,
+                               int *out_version,
+                               sasl_client_plug_t **pluglist,
+                               int *plugcount)
 {
-    openlog("browserid-client", LOG_NDELAY, LOG_AUTH);
-    syslog(LOG_EMERG, "browserid_client_plug_init_plugin initialized");
-    if (maxversion < SASL_CLIENT_PLUG_VERSION) {
-	SETERROR( utils, "ANONYMOUS version mismatch" );
-	return SASL_BADVERS;
-    }
-    
-    *out_version = SASL_CLIENT_PLUG_VERSION;
-    *pluglist = browserid_client_plugins;
-    *plugcount = 1;
-    return SASL_OK;
+        openlog("browserid-client", LOG_NDELAY, LOG_AUTH);
+        syslog(LOG_EMERG, "browserid_client_plug_init_plugin initialized");
+        if (maxversion < SASL_CLIENT_PLUG_VERSION) {
+                SETERROR( utils, "ANONYMOUS version mismatch" );
+                return SASL_BADVERS;
+        }
+
+        *out_version = SASL_CLIENT_PLUG_VERSION;
+        *pluglist = browserid_client_plugins;
+        *plugcount = 1;
+        return SASL_OK;
 }

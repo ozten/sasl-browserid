@@ -72,7 +72,7 @@ am__installdirs = "$(DESTDIR)$(libdir)"
 LTLIBRARIES = $(lib_LTLIBRARIES)
 libbrowserid_la_LIBADD =
 am_libbrowserid_la_OBJECTS = browserid.lo browserid_init.lo \
-	verifier.lo
+	verifier.lo session.lo
 libbrowserid_la_OBJECTS = $(am_libbrowserid_la_OBJECTS)
 libbrowserid_la_LINK = $(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) \
 	$(LIBTOOLFLAGS) --mode=link $(CCLD) $(AM_CFLAGS) $(CFLAGS) \
@@ -210,7 +210,7 @@ top_srcdir = @top_srcdir@
 AM_CFLAGS = -I/usr/include/sasl -lyajl `mysql_config --include --libs` -lcurl
 AM_LDFLAGS = -module -export-dynamic -rpath @plugindir@
 lib_LTLIBRARIES = libbrowserid.la
-libbrowserid_la_SOURCES = browserid.c browserid_init.c verifier.h verifier.c
+libbrowserid_la_SOURCES = browserid.c browserid_init.c verifier.h verifier.c session.c session.h
 libbrowserid_la_LDFLAGS = -rpath $(libdir)
 all: all-am
 
@@ -288,6 +288,7 @@ distclean-compile:
 
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/browserid.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/browserid_init.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/session.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/verifier.Plo@am__quote@
 
 .c.o:
