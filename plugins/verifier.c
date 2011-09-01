@@ -172,6 +172,7 @@ int browserid_verify(const sasl_utils_t *utils,
 	code = curl_easy_perform(handle);
 
 	syslog(LOG_DEBUG, "curl perform finished");
+        /* TODO catch 400 and 500 errors and log them for browserid.org */
 	if (code != 0)
 		syslog(LOG_DEBUG, "curl perform failed");
 

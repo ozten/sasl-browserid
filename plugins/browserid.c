@@ -179,12 +179,11 @@ static int browserid_server_mech_step(void *conn_context,
                         }
                 } else {
                         syslog(LOG_ERR, "No dice, STATUS=[%s] REASON=[%s]", browserid_response->status, browserid_response->reason);
-                        /* TODO sprintf error message with bid_resp->reason  */
-                        SETERROR(sparams->utils,
-                                 "Browserid.org assertion verification failed.");
+                        SETERROR(sparams->utils, browserid_response->reason);
+
                         _plug_free_string(sparams->utils, &audience_copy);
                         free(browserid_response);
-                        return SASL_BADPROT;
+                        return SASL_BADAUTH;
                 }
 
 
