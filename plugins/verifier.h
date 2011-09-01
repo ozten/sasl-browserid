@@ -5,6 +5,9 @@
 
 #include <stdlib.h>
 
+#include <sasl/sasl.h> /* saslplug.h should have included this ?!? */
+#include <sasl/saslplug.h>
+
 #include "yajl/yajl_parse.h"
 #include "yajl/yajl_tree.h"
 
@@ -22,6 +25,6 @@ struct json_ctx_t {
  * Uses the BrowserID webservice to verify an identity assertion
  * for a given audience. Returns a json_ctx_t.
  */
-int browserid_verify(struct json_ctx_t *json_ctx, const char *assertion, const char *audience);
+int browserid_verify(const sasl_utils_t *utils, struct json_ctx_t *json_ctx, const char *assertion, const char *audience);
 
 #endif /* VERIFIER_H */

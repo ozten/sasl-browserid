@@ -160,7 +160,7 @@ static int browserid_server_mech_step(void *conn_context,
         } else {
                 json_ctx = malloc(sizeof(struct json_ctx_t));
 
-                browserid_verify(json_ctx, assertion, audience_copy);
+                browserid_verify(sparams->utils, json_ctx, assertion, audience_copy);
 
                 if (strcasecmp(json_ctx->status, "okay") == 0) {
                         syslog(LOG_DEBUG, "Yes, we're all good! %s %s %s",
@@ -300,7 +300,7 @@ static int browserid_client_mech_step(void *conn_context,
                                       sasl_out_params_t *oparams)
 {
         client_context_t *context = (client_context_t *) conn_context;
-        const char *user = NULL, *authid = "ozten", *browser_assertion = NULL, *browser_audience = NULL;
+        const char *browser_assertion = NULL, *browser_audience = NULL;
         int browser_assertion_result = SASL_OK;
         int browser_audience_result = SASL_OK;
         int result;
