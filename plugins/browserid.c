@@ -104,7 +104,7 @@ static int browserid_server_mech_step(void *conn_context,
         unsigned lup=0;
         int result;
         char *audience_copy;
-        struct json_ctx_t *json_ctx;
+        struct browserid_response_t *browserid_response;
         char email[1024];
 
         syslog(LOG_DEBUG, "browserid_server_mech_step clientinlen=%d", clientinlen);
@@ -158,36 +158,37 @@ static int browserid_server_mech_step(void *conn_context,
                                              email, 0,
                                              SASL_CU_AUTHID | SASL_CU_AUTHZID, oparams);
         } else {
-                json_ctx = malloc(sizeof(struct json_ctx_t));
+                browserid_response = malloc(sizeof(struct browserid_response_t));
 
-                browserid_verify(sparams->utils, json_ctx, assertion, audience_copy);
+                browserid_verify(sparams->utils, browserid_response, assertion, audience_copy);
 
-                if (strcasecmp(json_ctx->status, "okay") == 0) {
-                        syslog(LOG_DEBUG, "Yes, we're all good! %s %s %s",
-                               json_ctx->email,
-                               json_ctx->audience,
-                               json_ctx->issuer);
-                        create_session(assertion, json_ctx->email);
+                if (strcasecmp(browserid_response->status, "okay") == 0) {
+                        syslog(LOG_DEBUG, "Yes, we're all good! %s %s %s until %llu",
+                               browserid_response->email,
+                               browserid_response->audience,
+                               browserid_response->issuer,
+                               browserid_response->valid_until);
+                        create_session(assertion, browserid_response->email);
                         result = sparams->canon_user(sparams->utils->conn,
-                                                     json_ctx->email, 0,
+                                                     browserid_response->email, 0,
                                                      SASL_CU_AUTHID | SASL_CU_AUTHZID, oparams);
                         if (result != SASL_OK) {
                                 _plug_free_string(sparams->utils, &audience_copy);
-                                free(json_ctx);
+                                free(browserid_response);
                                 return result;
                         }
                 } else {
-                        syslog(LOG_ERR, "No dice, STATUS=[%s] REASON=[%s]", json_ctx->status, json_ctx->reason);
+                        syslog(LOG_ERR, "No dice, STATUS=[%s] REASON=[%s]", browserid_response->status, browserid_response->reason);
                         /* TODO sprintf error message with bid_resp->reason  */
                         SETERROR(sparams->utils,
                                  "Browserid.org assertion verification failed.");
                         _plug_free_string(sparams->utils, &audience_copy);
-                        free(json_ctx);
+                        free(browserid_response);
                         return SASL_BADPROT;
                 }
 
 
-                free(json_ctx);
+                free(browserid_response);
         }
         _plug_free_string(sparams->utils, &audience_copy);
 

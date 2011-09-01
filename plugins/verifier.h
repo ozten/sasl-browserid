@@ -11,20 +11,20 @@
 #include "yajl/yajl_parse.h"
 #include "yajl/yajl_tree.h"
 
-struct json_ctx_t {
+struct browserid_response_t {
   char state[64];
   char status[64]; /* "okay" */
   char email[1024]; /* shout@ozten.com */
   char audience[1024]; /* mozillians.org */
-  /* long valid_until; timeout */
+  long long valid_until; /* timeout */
   char issuer[1024]; /* browserid.org:443 */
   char reason[1024]; /* Set if status is failure */
 };
 
 /**
  * Uses the BrowserID webservice to verify an identity assertion
- * for a given audience. Returns a json_ctx_t.
+ * for a given audience. Returns a browserid_response_t.
  */
-int browserid_verify(const sasl_utils_t *utils, struct json_ctx_t *json_ctx, const char *assertion, const char *audience);
+int browserid_verify(const sasl_utils_t *utils, struct browserid_response_t *browserid_response, const char *assertion, const char *audience);
 
 #endif /* VERIFIER_H */
