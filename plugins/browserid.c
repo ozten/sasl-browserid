@@ -151,7 +151,7 @@ static int browserid_server_mech_step(void *conn_context,
                assertion, audience_copy);
 
 
-        if (check_session(assertion, (char *)&email) == 1) {
+        if (check_session(sparams->utils, assertion, (char *)&email) == 1) {
                 syslog(LOG_DEBUG, "Got email = %s", email);
                 /* set user into the session or whatever... */
                 result = sparams->canon_user(sparams->utils->conn,
@@ -168,7 +168,7 @@ static int browserid_server_mech_step(void *conn_context,
                                browserid_response->audience,
                                browserid_response->issuer,
                                browserid_response->valid_until);
-                        create_session(assertion, browserid_response->email);
+                        create_session(sparams->utils, assertion, browserid_response->email);
                         result = sparams->canon_user(sparams->utils->conn,
                                                      browserid_response->email, 0,
                                                      SASL_CU_AUTHID | SASL_CU_AUTHZID, oparams);

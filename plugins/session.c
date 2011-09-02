@@ -7,14 +7,19 @@
 #include <mysql.h>
 #include <mysql/errmsg.h>
 
+#include <sasl.h>
+#include <saslplug.h>
+
 #include <session.h>
+
+static MYSQL * _connect(const sasl_utils_t *utils);
 
 /**
  * Checks for an active session based on the given assertion.
  * If a session is active, email will be populated.
  * returns bool YES/NO
  */
-int check_session(const char *assertion, char *email)
+int check_session(const sasl_utils_t *utils, const char *assertion, char *email)
 {
 	syslog(LOG_DEBUG, "MySQL client version: %s\n",
 	       mysql_get_client_info());
@@ -35,12 +40,8 @@ int check_session(const char *assertion, char *email)
 
 	int rv = 0; /* TODO use TRUE/FALSE bool */
 
-	conn = mysql_init(NULL);
-	if (conn == NULL) {
-	    syslog(LOG_EMERG, "Unable to mysql_init, this can't end well.");
-	}
-	conn = mysql_real_connect(conn, "localhost", "root", "", "mozillians", 
-				  (int)NULL, NULL, 0);
+
+	conn = _connect(utils);
 	if (conn == NULL) {
 		syslog(LOG_EMERG, "Unable to connect to mysql server");
 		syslog(LOG_EMERG, "Error %u: %s", mysql_errno(conn), 
@@ -81,7 +82,7 @@ int check_session(const char *assertion, char *email)
 	return rv;
 }
 
-int create_session(const char *assertion, const char *email)
+int create_session(const sasl_utils_t *utils, const char *assertion, const char *email)
 {
 	MYSQL *conn;
 	int query_rs;
@@ -96,13 +97,8 @@ int create_session(const char *assertion, const char *email)
 	char insert_email_esc[1024];
 	int rv = 0;
 
-	conn = mysql_init(NULL);
-	if (conn == NULL) {
-		syslog(LOG_EMERG, "Unable to mysql_init");
-		return 0;
-	}
-	conn = mysql_real_connect(conn, "localhost", "root", "", "mozillians", 
-				  (int)NULL, NULL, 0);
+      
+	conn = _connect(utils);
 	if (conn == NULL) {
 		syslog(LOG_EMERG, "Error %u: %s\n", mysql_errno(conn), 
 		       mysql_error(conn));
@@ -135,4 +131,51 @@ int create_session(const char *assertion, const char *email)
 	}
 	mysql_close(conn);
 	return rv;
+}
+
+static MYSQL * _connect(const sasl_utils_t *utils)
+{
+	MYSQL *conn;
+	const char *host;
+	const char *user;
+	const char *passwd;
+	const char *db;
+	const char *port_s;
+	unsigned int port;
+	int r;
+
+	r = utils->getopt(utils->getopt_context, "BROWSER-ID",
+			  "browserid_session_hostname", &host, NULL);
+	if (r || !host) {
+		host = "localhost";
+	}
+	r = utils->getopt(utils->getopt_context, "BROWSER-ID",
+			  "browserid_session_user", &user, NULL);
+	if (r || !user) {
+		user = "nobody";
+	}
+	r = utils->getopt(utils->getopt_context, "BROWSER-ID",
+			  "browserid_session_passwd", &passwd, NULL);
+	if (r || !passwd) {
+		passwd = "";
+	}
+	r = utils->getopt(utils->getopt_context, "BROWSER-ID",
+			  "browserid_session_database", &db, NULL);
+	if (r || !db) {
+		db = "";
+	}
+	r = utils->getopt(utils->getopt_context, "BROWSER-ID",
+			  "browserid_session_port", &port_s, NULL);
+	if (r || !port_s) {
+		port = (int)NULL;
+	} else {
+		sscanf(port_s, "%u", &port);
+	}
+	syslog(LOG_DEBUG, "mysql real connect with host=[%s] user=[%s] pass=[%s] for %s on port %u",
+	       host, user, passwd, db, port);
+	conn = mysql_init(NULL);
+	if (conn == NULL) {
+	        syslog(LOG_EMERG, "Unable to mysql_init, this can't end well.");
+	}
+	return mysql_real_connect(conn, host, user, passwd, db, port, NULL, 0);
 }

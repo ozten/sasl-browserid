@@ -6,6 +6,6 @@
 
 #endif /* SESSION_H */
 
-int check_session(const char *assertion, char *email);
+int check_session(const sasl_utils_t *utils, const char *assertion, char *email);
 
-int create_session(const char *assertion, const char *email);
+int create_session(const sasl_utils_t *utils, const char *assertion, const char *email);
