@@ -3,31 +3,51 @@
 This proposal outlines a [SASL mechanism](http://tools.ietf.org/html/rfc2222) 
 for authenticating via [BrowserID](https://browserid.org).
 
+TODO write this up in client / server dialog for RFC.
+
+## Terminology ##
+
+Assertion - A BrowserID encrypted token from a user's browser stating
+that they own a certain email address.
+
+Audience - A hostname and optionally a port number which requested the assertion. Examples: example.com, foo.example.com:8001
+
+Sessions - A web oriented use of this auth mechanism can configure 
+the mechanism to maintain a session state where Assertion verification is 
+cached.
+
 ## Flow ##
-### First Time ###
-C: 
+### First Time Valid Assertion ###
+Client sends assertionNULLaudience.
+Server receives assertionNULLaudience.
+Server MAY check a session via MD5 hash of assertion
+Server sees session cache miss.
+Server uses a GET request to browserid.org verfication web service.
+Server parses response as JSON.
+Server sees state is "okay" and email is "jane@example.com".
+Server MAY creat a session storing MD5 hash of assertion, email, and a modified timestamp.
+Server sets authid and authidz to email
+Server responds auth successful
 
-### During Current Session ###
-C: session-token
-S: checks TTL on session-token
-S: sets userid and auth to email address
-S: OK BROWSER-ID authentication successful
+### Second Request, Using Session ###
+This assumes a current session
 
-
-### During Stale Session with Valid Assertion ###
-C: session-token
-S: checks TTL on session-token
-S: Issues assertion/audience challange
-C: gets browserid assertion
-C: sends assertion and audience
-S: verifies assertion via browserid.org
-S: generates session-token and creates session
-S: Issues session-token challange
-C: MAY record session-token for future use
-S: sets userid and auth to email address
-S: OK BROWSER-ID authentication successful
+Client sends assertionNULLaudience.
+Server receives assertionNULLaudience.
+Server checks a session via MD5 hash of assertion
+Server sees session cache hit.
+Server loads email from session from MD5 hash.
+Server updates the modified time of the session by MD5 hash.
+Server sets authid and authidz to email
+Server responds auth successful
 
 ### Invalid Assertin ###
-C: sends invalid assertion/audience pair
-S: verifies assertion via browserid.org
-S: NO BROWSER-ID authentication failed
+Client sends assertionNULLaudience.
+Server receives assertionNULLaudience.
+Server checks a session via MD5 hash of assertion
+Server sees session cache miss.
+Server uses a GET request to browserid.org verfication web service.
+Server parses response as JSON.
+Server sees state is "failure".
+Server responds auth failure
+
