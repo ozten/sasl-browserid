@@ -113,8 +113,7 @@ int create_session(const char *assertion, const char *email)
 				 strlen(assertion));
 	mysql_real_escape_string(conn, email_esc, email, strlen(email));
 
-	sprintf(insert_email_esc, insert_email, assertion_esc, assertion_esc, 
-		email_esc);
+	sprintf(insert_email_esc, insert_email, assertion_esc, email_esc);
 	syslog(LOG_DEBUG, "Sending %s", insert_email_esc);
 	if (mysql_query(conn, insert_email_esc) == 0) {
 		if (mysql_affected_rows(conn) == 1) {
