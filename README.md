@@ -24,6 +24,13 @@ We'd love your help!
 * Make Masters
 * Cross-platform Funsters
 
+## Security Notes ##
+
+1. Don't use this in a production system.
+
+2. Make sure the client and server applications recognize and 
+[block unknown email addresses](docs/security_block_unknown_email.md)!
+
 ## Requirements ##
 This plugin is under development on i686 Ubuntu 10.04 with:
 
