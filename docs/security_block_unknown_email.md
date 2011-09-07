@@ -13,7 +13,7 @@ you depended on username and password. Calling 'get-keys-to-the-kingdom'
 would fail if a valid username/password combo were entered.
 
 You add SASL BROWSER-ID. Calling 'get-keys-to-the-kingdom' always 
-successeds as long as the user submitted a valid verify email assertion
+succeeds as long as the user submitted a valid verify email assertion
 and audience. Even if 'unknown@example.com' should not have been allowed
 access to 'keys-to-the-kingdom'.
 
@@ -23,15 +23,16 @@ Basically, we need to make sure that we've been authenticated as a
 valid user. How this is done will vary system by system.
 
 Generically:
+
 * Enforce ACL in your configuration
 * Enforce strict mapping of email address into valid accounts
 * Discover email address and make sure it's known
 * Have a 'new user' registration path for unknown users
 
-So with our keys-to-the-kingdom approach, we could query a database to
+So with our get-keys-to-the-kingdom function, we could query a database to
 make sure the email address exists in our user table.
 
-The following are specific SASL enabled services:
+The following tips are specific SASL enabled services:
 
 ## OpenLDAP ##
 Make sure your slapd.conf has ACL that restrict access
@@ -55,9 +56,12 @@ Example slapd.conf snippets:
 In code, use ldap's whoami function and ensure that the DN does not 
 contain `cn=browser-id`.
 
-If whoami is unavailable, good ACL and a ACL test suite are critical.
+If whoami is unavailable in your programming language, good ACL and a 
+ACL test suite are critical.
 
 ### Testing Notes ###
 Make sure unknown email addresses fail when trying to search/add/modify/delete.
 
-Make sure multiple records with the email address cause an auth failure.
+Make a test case where multiple records with the verified email address 
+cause an auth failure. Search based mapping should have one and only one 
+match for a known email address.
