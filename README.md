@@ -31,6 +31,16 @@ We'd love your help!
 2. Make sure the client and server applications recognize and 
 [block unknown email addresses](docs/security_block_unknown_email.md)!
 
+## Quick Start ##
+
+    vagrant up
+    vagrant ssh
+
+If you have vagrant install, this will give you a fully working setup to play
+around with or hack on.
+
+Otherwise...
+
 ## Requirements ##
 This plugin is under development on i686 Ubuntu 10.04 with:
 
@@ -41,7 +51,7 @@ This plugin is under development on i686 Ubuntu 10.04 with:
 * MySQL client libraries for C
 
 ### Ubuntu Tips ###
-1) sudo aptitude install ruby cmake automake libcurl-dev libmysqlclient-dev
+1) sudo aptitude install ruby cmake automake libcurl-dev libmysqlclient-dev libsasl2-dev libcurl4-gnutls-dev
 
 ruby and cmake are only needed to compile yajl.
 
