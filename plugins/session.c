@@ -12,6 +12,8 @@
 
 #include <session.h>
 
+#define MAX_EMAIL 1024
+
 static MYSQL * _connect(const sasl_utils_t *utils);
 
 /**
@@ -25,21 +27,19 @@ int check_session(const sasl_utils_t *utils, const char *assertion, char *email)
 	       mysql_get_client_info());
 	MYSQL *conn;
 	int query_rs;
-	int num_rs;
 	MYSQL_RES *rs;
 	MYSQL_ROW row;
 
-	char assertion_esc[300];
+        char assertion_esc[strlen(assertion) + 20]; /* TODO... */
 	char *select_email =
 	    "SELECT email FROM browserid_session WHERE digest = MD5('%s')";
-	char select_email_esc[1024];
+	char select_email_esc[strlen(select_email) + strlen(assertion) + 1];
 
 	char *update_session = "UPDATE browserid_session SET created = NOW() "
 			       "WHERE digest = MD5('%s')";
-	char update_session_esc[1024];
+	char update_session_esc[strlen(update_session) + strlen(assertion) + 1];
 
-	int rv = 0; /* TODO use TRUE/FALSE bool */
-
+	int rv = 0;
 
 	conn = _connect(utils);
 	if (conn == NULL) {
@@ -47,12 +47,13 @@ int check_session(const sasl_utils_t *utils, const char *assertion, char *email)
 		syslog(LOG_EMERG, "Error %u: %s", mysql_errno(conn), 
 		       mysql_error(conn));
 	}
+
 	mysql_real_escape_string(conn, assertion_esc, assertion, 
 				 strlen(assertion));
 	sprintf(select_email_esc, select_email, assertion_esc);
 	syslog(LOG_DEBUG, "Sending %s", select_email_esc);
 
-	if (mysql_query(conn, select_email_esc) == 0) {
+	if ((query_rs = mysql_query(conn, select_email_esc)) == 0) {
 		rs = mysql_store_result(conn);
 		while((row = mysql_fetch_row(rs))) {
 			syslog(LOG_DEBUG, "msyql email: %s", row[0]);
@@ -86,15 +87,12 @@ int create_session(const sasl_utils_t *utils, const char *assertion, const char 
 {
 	MYSQL *conn;
 	int query_rs;
-	int num_rs;
-	MYSQL_RES *rs;
-	MYSQL_ROW row;
 
 	char assertion_esc[300];
 	char email_esc[300];
 	char *insert_email = "INSERT INTO browserid_session (digest, email) "
 			     "VALUES (MD5('%s'), '%s')";
-	char insert_email_esc[1024];
+	char insert_email_esc[MAX_EMAIL];
 	int rv = 0;
 
       
@@ -111,7 +109,7 @@ int create_session(const sasl_utils_t *utils, const char *assertion, const char 
 
 	sprintf(insert_email_esc, insert_email, assertion_esc, email_esc);
 	syslog(LOG_DEBUG, "Sending %s", insert_email_esc);
-	if (mysql_query(conn, insert_email_esc) == 0) {
+	if ((query_rs = mysql_query(conn, insert_email_esc)) == 0) {
 		if (mysql_affected_rows(conn) == 1) {
 			syslog(LOG_DEBUG, "Successfully created a session\n");
 			rv = 1;

@@ -133,6 +133,7 @@ int browserid_verify(const sasl_utils_t *utils,
 	syslog(LOG_ERR, "bidurl = %s", bid_url);
 
 	strcpy(browserid_response->state, "");
+	strcpy(browserid_response->status, "");
 	strcpy(browserid_response->email, "");
 	strcpy(browserid_response->audience, "");
 	strcpy(browserid_response->issuer, "");
@@ -171,10 +172,14 @@ int browserid_verify(const sasl_utils_t *utils,
 
 	code = curl_easy_perform(handle);
 
-	syslog(LOG_DEBUG, "curl perform finished");
-        /* TODO catch 400 and 500 errors and log them for browserid.org */
-	if (code != 0)
-		syslog(LOG_DEBUG, "curl perform failed");
+	if (code == 0) {
+		syslog(LOG_DEBUG, "curl_easy_perform finished");
+	} else {
+		syslog(LOG_EMERG, "curl_easy_perform failed [%u] %s", code, 
+		       curl_easy_strerror(code));
+		strcpy(browserid_response->status, "curl-error");
+		strcpy(browserid_response->reason, curl_easy_strerror(code));
+	}
 
 	yajl_complete_parse(y_handle);
 	yajl_free(y_handle);

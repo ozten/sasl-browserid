@@ -44,22 +44,19 @@
 #include <session.h>
 #include <verifier.h>
 
-static const char plugin_id[] = "$Id: browserid.c,v 1.180 2011/08/11 17:00:00 mel Exp $";
+/* MAX_ASSERTION 3000 characters, TODO verify if this will be be standardized */
+#define MAX_ASSERTION 3000
 
-static char *quote (char *str);
+/* MAX_AUDIENCE 256 for max domain name length and some change for port number */
+#define MAX_AUDIENCE 300
+
+static const char plugin_id[] = "$Id: browserid.c,v 1.180 2011/08/11 17:00:00 mel Exp $";
 
 struct context;
 
 static const unsigned short version = 5;
 
 /*****************************	Common Section	*****************************/
-
-static void browserid_common_mech_dispose(void *conn_context,
-                                          const sasl_utils_t *utils)
-{
-        syslog(LOG_EMERG, "browserid_server_mech_dispose");
-        return;
-}
 
 /**
  * Application is shutting down. Your FREE, FREE!
@@ -112,7 +109,15 @@ static int browserid_server_mech_step(void *conn_context,
         /* should have received assertion NUL audience */
 
         /* get assertion */
+
         assertion = clientin;
+
+
+	if (strlen(assertion) > MAX_ASSERTION) {
+            syslog(LOG_ERR, "Client send a longer assertion [%u] that we expected, failing", strlen(assertion));
+        	return SASL_BADPROT;
+	}
+
         syslog(LOG_DEBUG, "Assertion: [%s]", assertion);
 
         while ((lup < clientinlen) && (clientin[lup] != 0)) ++lup;
@@ -128,13 +133,17 @@ static int browserid_server_mech_step(void *conn_context,
         while ((lup < clientinlen) && (clientin[lup] != 0)) ++lup;
 
         audience_len = (unsigned) (clientin + lup - audience);
-
+	if (audience_len > MAX_AUDIENCE) {
+            syslog(LOG_ERR, "Client send a longer audience [%u] that we expected, failing", 
+                   strlen(audience));
+		return SASL_BADPROT;
+	}
         syslog(LOG_DEBUG, "lup = %d clientinlen = %d", lup, clientinlen);
 
         if (lup != clientinlen) {
                 SETERROR(sparams->utils,
                          "Oh snap, more data than we were expecting in the BROWSER-ID plugin\n");
-                return SASL_BADPROT;
+
         }
 
         /* Ensure null terminated */
@@ -223,7 +232,7 @@ static sasl_server_plug_t browserid_server_plugins[] =
         | SASL_SEC_NOANONYMOUS
         | SASL_SEC_MUTUAL_AUTH,		/* security_flags */
         SASL_FEAT_ALLOWS_PROXY,		/* features */
-        NULL,                           /* glob_context */
+        NULL,				/* glob_context */
         &browserid_server_mech_new,	/* mech_new */
         &browserid_server_mech_step,	/* mech_step */
         &browserid_server_mech_dispose,	/* mech_dispose */
@@ -255,7 +264,7 @@ int browserid_server_plug_init(sasl_utils_t *utils,
         return SASL_OK;
 }
 
-/*****************************  Client Section  *****************************/
+/*****************************	Client Section	*****************************/
 
 typedef struct client_context {
         char *out_buf;
@@ -324,6 +333,8 @@ static int browserid_client_mech_step(void *conn_context,
                     (browser_assertion_result != SASL_INTERACT)) {
                         return browser_assertion_result;
                 }
+
+
         }
 
         /* try to get the audience */
@@ -335,6 +346,7 @@ static int browserid_client_mech_step(void *conn_context,
                     (browser_audience_result != SASL_INTERACT)) {
                         return browser_audience_result;
                 }
+
         }
 
         /* free prompts we got */
@@ -364,21 +376,29 @@ static int browserid_client_mech_step(void *conn_context,
                 if (result != SASL_OK) goto cleanup;
                 return SASL_INTERACT;
         }
-
+	if (strlen(browser_assertion) > MAX_ASSERTION) {
+		syslog(LOG_ERR, "browser_assertion is larger than we expected (%u), failing", strlen(browser_assertion));
+		return SASL_BADPARAM;
+	}
+	if (strlen(browser_audience) > MAX_AUDIENCE) {
+		syslog(LOG_ERR, "browser_audience is larger than we expected (%u), failing", strlen(browser_audience));
+		return SASL_BADPARAM;
+	}
         syslog(LOG_DEBUG, "YO ASSERTION=[%s] AUDIENCE=[%s]", browser_assertion, browser_audience);
 
-        /* TODO ... I think this is SASL Abuse. This should come as a second step. */
-        params->canon_user(params->utils->conn, browser_assertion, 0,
+        result = params->canon_user(params->utils->conn, browser_assertion, 0,
                            SASL_CU_AUTHZID, oparams);
-        params->canon_user(params->utils->conn, browser_audience, 0,
-                           SASL_CU_AUTHID, oparams);
+
+        if (result != SASL_OK) goto cleanup;
+
+        result = params->canon_user(params->utils->conn, browser_audience, 0,
+                                    SASL_CU_AUTHID, oparams);
 
         if (result != SASL_OK) goto cleanup;
 
         syslog(LOG_DEBUG, "Got passed canon_user");
 
         /* send assertion NUL audience NUL */
-        /* we should not use oparams... use context instead ? */
         *clientoutlen = (strlen(browser_assertion) + 1 + strlen(browser_audience));
 
         syslog(LOG_DEBUG, "clientoutlen is going to be %u", *clientoutlen);
