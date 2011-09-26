@@ -95,7 +95,7 @@ static int json_map_key(void *ctx, const unsigned char *ukey, size_t len)
 	return 1;
 }
 
-static size_t parse_json(void *ptr, size_t size, size_t  nmemb, void *stream)
+static size_t parse_json(void *ptr, size_t size, size_t	 nmemb, void *stream)
 {
 	size_t total_size = size * nmemb;
 	yajl_handle y_handle = (yajl_handle)stream;
@@ -117,8 +117,8 @@ int browserid_verify(const sasl_utils_t *utils,
 	CURL *handle;
 	CURLcode code;
 	const char *bid_url;
-        char *bid_body;
-        char *bid_body_fmt = "assertion=%s&audience=%s";
+	char *bid_body;
+	char *bid_body_fmt = "assertion=%s&audience=%s";
 
 	yajl_handle y_handle;
 	int r;
@@ -127,14 +127,14 @@ int browserid_verify(const sasl_utils_t *utils,
 			  "browserid_endpoint", &bid_url, NULL);
 	if (r || !bid_url) {
 		bid_url = 
-                    "https://browserid.org/verify";
+		    "https://browserid.org/verify";
 	}
 
 	syslog(LOG_INFO, "bidurl = %s", bid_url);
 
-        bid_body = malloc(strlen(bid_body_fmt) + 
-                          strlen(assertion) + strlen(audience));
-        sprintf(bid_body, bid_body_fmt, assertion, audience);
+	bid_body = malloc(strlen(bid_body_fmt) + 
+			  strlen(assertion) + strlen(audience));
+	sprintf(bid_body, bid_body_fmt, assertion, audience);
 	syslog(LOG_INFO, "bid_body = %s", bid_body);
 
 	strcpy(browserid_response->state, "");
@@ -161,11 +161,11 @@ int browserid_verify(const sasl_utils_t *utils,
 	}
 
 	if (0 != curl_easy_setopt(handle, CURLOPT_URL, bid_url))
-		syslog(LOG_DEBUG, "curl setopt url failed");
-        if (0 != curl_easy_setopt(handle, CURLOPT_POST, 1))
-            syslog(LOG_DEBUG, "curl setopt post failed");
-        if (0 != curl_easy_setopt(handle, CURLOPT_POSTFIELDS, bid_body))
-            syslog(LOG_ERR, "curl setopt postfields failed");
+		syslog(LOG_ERR, "curl setopt url failed");
+	if (0 != curl_easy_setopt(handle, CURLOPT_POST, 1))
+		syslog(LOG_ERR, "curl setopt post failed");
+	if (0 != curl_easy_setopt(handle, CURLOPT_POSTFIELDS, bid_body))
+		syslog(LOG_ERR, "curl setopt postfields failed");
 	if (0 != curl_easy_setopt(handle, CURLOPT_FOLLOWLOCATION, 1))
 		syslog(LOG_DEBUG, "curl setopt follow");
 
@@ -173,10 +173,10 @@ int browserid_verify(const sasl_utils_t *utils,
 		syslog(LOG_DEBUG, "curl setopt ssl failed");
 
 	if (0 != curl_easy_setopt(handle, CURLOPT_WRITEFUNCTION, parse_json))
-		syslog(LOG_DEBUG, "curl setopt write fn failed");
+		syslog(LOG_ERR, "curl setopt write fn failed");
 
 	if (0 != curl_easy_setopt(handle, CURLOPT_WRITEDATA, y_handle))
-		syslog(LOG_DEBUG, "curl setopt writedata failed");
+		syslog(LOG_ERR, "curl setopt writedata failed");
 
 	code = curl_easy_perform(handle);
 
@@ -191,8 +191,8 @@ int browserid_verify(const sasl_utils_t *utils,
 
 	yajl_complete_parse(y_handle);
 	yajl_free(y_handle);
-        
+	
 	curl_easy_cleanup(handle);
-        free(bid_body);
+	free(bid_body);
 	return 1;
 }

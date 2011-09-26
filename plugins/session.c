@@ -30,7 +30,7 @@ int check_session(const sasl_utils_t *utils, const char *assertion, char *email)
 	MYSQL_RES *rs;
 	MYSQL_ROW row;
 
-        char assertion_esc[strlen(assertion) + 20]; /* TODO... */
+	char assertion_esc[strlen(assertion) + 20]; /* TODO... */
 	char *select_email =
 	    "SELECT email FROM browserid_session WHERE digest = MD5('%s')";
 	char select_email_esc[strlen(select_email) + strlen(assertion) + 1];
@@ -95,7 +95,6 @@ int create_session(const sasl_utils_t *utils, const char *assertion, const char 
 	char insert_email_esc[MAX_EMAIL];
 	int rv = 0;
 
-      
 	conn = _connect(utils);
 	if (conn == NULL) {
 		syslog(LOG_EMERG, "Error %u: %s\n", mysql_errno(conn), 
@@ -169,11 +168,12 @@ static MYSQL * _connect(const sasl_utils_t *utils)
 	} else {
 		sscanf(port_s, "%u", &port);
 	}
-	syslog(LOG_DEBUG, "mysql real connect with host=[%s] user=[%s] pass=[%s] for %s on port %u",
+	syslog(LOG_DEBUG, "mysql real connect with host=[%s] user=[%s] "
+	       "pass=[%s] for %s on port %u",
 	       host, user, passwd, db, port);
 	conn = mysql_init(NULL);
 	if (conn == NULL) {
-	        syslog(LOG_EMERG, "Unable to mysql_init, this can't end well.");
+		syslog(LOG_EMERG, "Unable to mysql_init, this can't end well.");
 	}
 	return mysql_real_connect(conn, host, user, passwd, db, port, NULL, 0);
 }

@@ -12,3 +12,4 @@ config.log
 config.status
 #	Makefile
 stamp-h1
+*.pyc

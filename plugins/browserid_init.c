@@ -29,38 +29,38 @@
 #define SASL_CLIENT_PLUG_INIT( x ) \
 extern sasl_client_plug_init_t x##_client_plug_init; \
 PLUG_API int sasl_client_plug_init(const sasl_utils_t *utils, \
-                         int maxversion, int *out_version, \
+			 int maxversion, int *out_version, \
 			 sasl_client_plug_t **pluglist, \
-                         int *plugcount) { \
-        return x##_client_plug_init(utils, maxversion, out_version, \
+			 int *plugcount) { \
+	return x##_client_plug_init(utils, maxversion, out_version, \
 				     pluglist, plugcount); \
 }
 
 #define SASL_SERVER_PLUG_INIT( x ) \
 extern sasl_server_plug_init_t x##_server_plug_init; \
 PLUG_API int sasl_server_plug_init(const sasl_utils_t *utils, \
-                         int maxversion, int *out_version, \
+			 int maxversion, int *out_version, \
 			 sasl_server_plug_t **pluglist, \
-                         int *plugcount) { \
-        return x##_server_plug_init(utils, maxversion, out_version, \
+			 int *plugcount) { \
+	return x##_server_plug_init(utils, maxversion, out_version, \
 				     pluglist, plugcount); \
 }
 
 #ifdef WIN32
 BOOL APIENTRY DllMain( HANDLE hModule, 
-                       DWORD  ul_reason_for_call, 
-                       LPVOID lpReserved
+		       DWORD  ul_reason_for_call, 
+		       LPVOID lpReserved
 					 )
 {
-    switch (ul_reason_for_call)
+	switch (ul_reason_for_call)
 	{
 		case DLL_PROCESS_ATTACH:
 		case DLL_THREAD_ATTACH:
 		case DLL_THREAD_DETACH:
 		case DLL_PROCESS_DETACH:
 			break;
-    }
-    return TRUE;
+	}
+	return TRUE;
 }
 #endif
 
