@@ -376,10 +376,18 @@ static int browserid_client_mech_step(void *conn_context,
                 if (result != SASL_OK) goto cleanup;
                 return SASL_INTERACT;
         }
+        if (strlen(browser_assertion) == 0) {
+                syslog(LOG_ERR, "browser_assertion is empty, failing");
+		return SASL_BADPARAM;
+        }
 	if (strlen(browser_assertion) > MAX_ASSERTION) {
 		syslog(LOG_ERR, "browser_assertion is larger than we expected (%u), failing", strlen(browser_assertion));
 		return SASL_BADPARAM;
 	}
+        if (strlen(browser_audience) == 0) {
+                syslog(LOG_ERR, "browser_audience is empty, failing");
+		return SASL_BADPARAM;
+        }
 	if (strlen(browser_audience) > MAX_AUDIENCE) {
 		syslog(LOG_ERR, "browser_audience is larger than we expected (%u), failing", strlen(browser_audience));
 		return SASL_BADPARAM;

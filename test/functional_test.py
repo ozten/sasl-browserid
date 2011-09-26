@@ -93,7 +93,7 @@ class NormalUsageTestCase(unittest.TestCase):
         audience = ''
 
         sasl_creds = browserid(assertion, audience)
-        self.assertRaises(ldap.INVALID_CREDENTIALS, lambda:\
+        self.assertRaises(ldap.LOCAL_ERROR, lambda:\
             self.ldap_conn.sasl_interactive_bind_s("", sasl_creds))
 
     def test_bad_assertion_buffer_overflow_assertion(self):
@@ -128,6 +128,13 @@ class NormalUsageTestCase(unittest.TestCase):
         sasl_creds = browserid(assertion, audience)
         self.assertRaises(ldap.INVALID_CREDENTIALS, lambda:\
             self.ldap_conn.sasl_interactive_bind_s("", sasl_creds))
+
+    def xtest_to_write(self):
+        """
+        TODO:
+        /usr/lib/sasl2/slapd.conf with no browserid_endpoint
+        """
+        pass
 
 
 if __name__ == '__main__':
