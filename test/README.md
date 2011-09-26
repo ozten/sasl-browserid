@@ -16,7 +16,12 @@ Each of these must be setup and running based on ../configs/
 
 ## Running Tests ##
 
+Setup config (edit as needed).
+
+    cp test/config.py-dist test/config.py
+
 Run the following command:
 
     sudo python test/unit_privileged_test_suite.py
+    python test/functional_test.py
     
