@@ -89,6 +89,13 @@ Details can be found in the INSTALL doc or
 
     ./configure --help
 
+## Setup MySQL Session ##
+
+    $ mysql -uroot -p
+    mysql> create database sasl_browserid;
+    $ exit
+    $ mysql -u root -p sasl_browserid < configs/browserid_session.ddl
+
 ## Sanity Tests ##
 
 The following are ways to test this plugin.
