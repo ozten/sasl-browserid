@@ -19,7 +19,11 @@ import config
 
 class browserid(sasl):
     """This class handles SASL client input names for
-       BROWSER-ID authentication."""
+       BROWSER-ID authentication.
+
+       Expected Failure Notes:
+       SASL_BADPARAM shows up as a ldap.LOCAL_ERROR exception.
+    """
 
     def __init__(self, assertion, audience):
         auth_dict = {CB_USER:assertion,
@@ -93,16 +97,33 @@ class NormalUsageTestCase(unittest.TestCase):
             self.ldap_conn.sasl_interactive_bind_s("", sasl_creds))
 
     def test_bad_assertion_buffer_overflow_assertion(self):
-        assertion = ''.join(map(str, range(400)))
+        assertion = ''.join(map(str, range(2000)))
+        audience = 'example.com'
+
+        sasl_creds = browserid(assertion, audience)
+        self.assertRaises(ldap.LOCAL_ERROR, lambda:\
+            self.ldap_conn.sasl_interactive_bind_s("", sasl_creds))
+
+        # slapd is still running
+        assertion = '32lj432j4.an.unknown.assertion.23k4j23l4j'
         audience = 'example.com'
 
         sasl_creds = browserid(assertion, audience)
         self.assertRaises(ldap.INVALID_CREDENTIALS, lambda:\
             self.ldap_conn.sasl_interactive_bind_s("", sasl_creds))
 
+
     def test_bad_assertion_buffer_overflow_audience(self):
         assertion = 'l2k3j4kj324l2k3jlk.2l3j32.lkj324l32kj4'
-        audience = ''.join(map(str, range(400)))
+        audience = ''.join(map(str, range(1000)))
+
+        sasl_creds = browserid(assertion, audience)
+        self.assertRaises(ldap.LOCAL_ERROR, lambda:\
+            self.ldap_conn.sasl_interactive_bind_s("", sasl_creds))
+
+        # slapd is still running
+        assertion = '32lj432j4.an.unknown.assertion.23k4j23l4j'
+        audience = 'example.com'
 
         sasl_creds = browserid(assertion, audience)
         self.assertRaises(ldap.INVALID_CREDENTIALS, lambda:\
