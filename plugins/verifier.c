@@ -116,21 +116,26 @@ int browserid_verify(const sasl_utils_t *utils,
 {
 	CURL *handle;
 	CURLcode code;
-	const char*bid_url_fmt;
-	char bid_url[8192];
+	const char *bid_url;
+        char *bid_body;
+        char *bid_body_fmt = "assertion=%s&audience=%s";
+
 	yajl_handle y_handle;
 	int r;
 
 	r = utils->getopt(utils->getopt_context, "BROWSER-ID",
-			  "browserid_endpoint", &bid_url_fmt, NULL);
-	if (r || !bid_url_fmt) {
-		bid_url_fmt = 
-                    "https://browserid.org/verify?assertion=%s&audience=%s";
+			  "browserid_endpoint", &bid_url, NULL);
+	if (r || !bid_url) {
+		bid_url = 
+                    "https://browserid.org/verify";
 	}
 
-	sprintf(bid_url, bid_url_fmt, assertion, audience);
-	/* TODO... free bid_url_fmt ? */
-	syslog(LOG_ERR, "bidurl = %s", bid_url);
+	syslog(LOG_INFO, "bidurl = %s", bid_url);
+
+        bid_body = malloc(strlen(bid_body_fmt) + 
+                          strlen(assertion) + strlen(audience));
+        sprintf(bid_body, bid_body_fmt, assertion, audience);
+	syslog(LOG_INFO, "bid_body = %s", bid_body);
 
 	strcpy(browserid_response->state, "");
 	strcpy(browserid_response->status, "");
@@ -157,7 +162,10 @@ int browserid_verify(const sasl_utils_t *utils,
 
 	if (0 != curl_easy_setopt(handle, CURLOPT_URL, bid_url))
 		syslog(LOG_DEBUG, "curl setopt url failed");
-
+        if (0 != curl_easy_setopt(handle, CURLOPT_POST, 1))
+            syslog(LOG_DEBUG, "curl setopt post failed");
+        if (0 != curl_easy_setopt(handle, CURLOPT_POSTFIELDS, bid_body))
+            syslog(LOG_ERR, "curl setopt postfields failed");
 	if (0 != curl_easy_setopt(handle, CURLOPT_FOLLOWLOCATION, 1))
 		syslog(LOG_DEBUG, "curl setopt follow");
 
@@ -183,7 +191,8 @@ int browserid_verify(const sasl_utils_t *utils,
 
 	yajl_complete_parse(y_handle);
 	yajl_free(y_handle);
-
+        
 	curl_easy_cleanup(handle);
+        free(bid_body);
 	return 1;
 }
