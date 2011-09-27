@@ -47,7 +47,7 @@ This plugin is under development on i686 Ubuntu 10.04 with:
 * Cyrus SASL 2.1.23
 * OpenLDAP 2.4.23
 * libcurl
-* [yajl](https://github.com/lloyd/yajl) 2.0.1
+* [yajl](https://github.com/lloyd/yajl) 2.0.2
 * MySQL client libraries for C
 
 ### Ubuntu Tips ###
@@ -59,21 +59,14 @@ automate is only needed to compile sasl-browserid.
 
 2) Compile [yajl](https://lloyd.github.com/yajl/)
 
-We want yajl 2.0.1 or greater, which most distros haven't packaged.
+We want yajl 2.0.2 or greater, which most distros haven't packaged.
 
-    wget http://github.com/lloyd/yajl/tarball/2.0.1 -O yajl-2.0.1.tar.gz
-    tar zxvf yajl-2.0.1.tar.gz
-    cd lloyd-yajl-f4b2b1a
+    wget http://github.com/lloyd/yajl/tarball/2.0.2 -O yajl-2.0.2.tar.gz
+    tar zxvf yajl-2.0.2.tar.gz
+    cd lloyd-yajl-g5b0e7df
     ./configure
     sudo make install
-
-You may need to run
-
     ldconfig /usr/local/lib
-
-You can wait until a later test to figure this out. You'll need it if you see this in /var/log/auth.log
-
-    Aug 30 06:57:40 lucid32 saslpluginviewer: unable to dlopen /usr/lib/sasl2/libbrowserid.so.0: libyajl.so.2: cannot open shared object file: No such file or directory
 
 ## Install SASL-BrowserID ##
 

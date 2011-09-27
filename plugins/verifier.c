@@ -7,101 +7,43 @@
 #include <curl/curl.h>
 #include <sasl/sasl.h> /* saslplug.h should have included this ?!? */
 #include <sasl/saslplug.h>
-#include "yajl/yajl_parse.h"
 #include "yajl/yajl_tree.h"
 
 #include <verifier.h>
 
-static int json_number(void *ctx, const char* val, size_t len);
+#define JSON_BUFFER 256
 
-static int json_string(void *ctx, const unsigned char *ukey, size_t len);
-
-static int json_map_key(void *ctx, const unsigned char *ukey, size_t len);
-
-static size_t parse_json(void *ptr, size_t size, size_t nmemb, void *stream);
-
-/* yajl_callback functions */
-yajl_callbacks yajl_cbs[] = {
-	NULL,	      /* NULL */
-	NULL,	      /* boolean */
-	NULL,	      /* integer */
-	NULL,	      /* double */
-	json_number,
-	json_string,
-	NULL,	      /* start map */
-	json_map_key,
-	NULL,	      /* end map */
-	NULL,	      /* start array */
-	NULL	      /* end array */
+/* Helper struct for CURL response */
+struct json_response {
+  char *memory;
+  size_t size;
+  size_t realsize;
 };
 
-static int json_number(void *ctx, const char* ukey, size_t len)
+/** Callback function for streaming CURL response */
+static size_t write_cb(void *contents, size_t size, size_t nmemb, void *userp)
 {
-	struct browserid_response_t *parser = ctx;
-	char *val = strndup(ukey, len);
-	if (strcasecmp(parser->state, "valid-until") == 0) {
-		sscanf(val, "%lli", &parser->valid_until);
-		syslog(LOG_DEBUG, "valid-until=%llu", parser->valid_until);
-	} else {
-		syslog(LOG_DEBUG, "Unknown state %s", parser->state);
+	size_t realsize = size * nmemb;
+	struct json_response *mem = (struct json_response *)userp;
+
+	if (mem->size + realsize >= mem->realsize) {
+		mem->realsize = mem->size + realsize + JSON_BUFFER;
+		void *tmp = malloc(mem->size + realsize + JSON_BUFFER);
+		memcpy(tmp, mem->memory, mem->size);
+		free(mem->memory);
+		mem->memory = malloc(mem->size + realsize + JSON_BUFFER);
+		memcpy(mem->memory, tmp, mem->size);
+		free(tmp);
 	}
-	return 1;
+
+	memcpy(&(mem->memory[mem->size]), contents, realsize);
+	mem->size += realsize;
+	mem->memory[mem->size] = 0;
+	return realsize;
 }
 
-static int json_string(void *ctx, const unsigned char *ukey, size_t len)
-{
-	struct browserid_response_t *parser = ctx;
-	const char *key = parser->state;
-	const char *val = strndup(ukey, len);
-	syslog(LOG_DEBUG, "json_string %s=%s %u", key, val, len);
-	syslog(LOG_DEBUG, "size was %zu", len);
-
-	if (strcasecmp(key, "status") == 0) {
-		strcpy(parser->status, val);
-		parser->status[len] = '\0';
-		syslog(LOG_DEBUG, "status=%s from %s", parser->status, val);
-	} else if (strcasecmp(key, "email") == 0) {
-		strcpy(parser->email, val);
-		parser->email[len] = '\0';
-		syslog(LOG_DEBUG, "email=%s", parser->email);
-	} else if (strcasecmp(key, "audience") == 0) {
-		strcpy(parser->audience, val);
-		parser->audience[len] = '\0';
-		syslog(LOG_DEBUG, "audience = %s", parser->audience);
-	} else if (strcasecmp(key, "issuer") == 0) {
-		strcpy(parser->issuer, val);
-		parser->issuer[len] = '\0';
-		syslog(LOG_DEBUG, "issuer=%s", parser->issuer);
-	} else if (strcasecmp(key, "valid-until") == 0) {
-		sscanf(val, "%lli", &parser->valid_until);
-		syslog(LOG_DEBUG, "valid-until=%llu", parser->valid_until);
-	} else if (strcasecmp(key, "reason") == 0) {
-		strcpy(parser->reason, val);
-		parser->reason[len] = '\0';
-		syslog(LOG_DEBUG, "reason=%s", parser->reason);
-	} else {
-		syslog(LOG_DEBUG, "unknown json_string %s=%s", key, val);
-	}
-	return 1;
-}
-
-static int json_map_key(void *ctx, const unsigned char *ukey, size_t len)
-{
-	struct browserid_response_t *parser = ctx;
-	const char *key = strndup(ukey, len);
-	strcpy(parser->state, key);
-	parser->state[len] = '\0';
-	syslog(LOG_DEBUG, "Preparing %s from %s", parser->state, key);
-	return 1;
-}
-
-static size_t parse_json(void *ptr, size_t size, size_t	 nmemb, void *stream)
-{
-	size_t total_size = size * nmemb;
-	yajl_handle y_handle = (yajl_handle)stream;
-	yajl_parse(y_handle, ptr, total_size);
-	return total_size;
-}
+static int parse(const char* resp,
+		  struct browserid_response_t *browserid_response);
 
 /**
  * Attempts to verify an assertion and audience against the
@@ -119,20 +61,22 @@ int browserid_verify(const sasl_utils_t *utils,
 	const char *bid_url;
 	char *bid_body;
 	char *bid_body_fmt = "assertion=%s&audience=%s";
+	struct json_response json_text;
+	char *resp;
 
-	yajl_handle y_handle;
+
 	int r;
 
 	r = utils->getopt(utils->getopt_context, "BROWSER-ID",
 			  "browserid_endpoint", &bid_url, NULL);
 	if (r || !bid_url) {
-		bid_url = 
+		bid_url =
 		    "https://browserid.org/verify";
 	}
 
 	syslog(LOG_INFO, "bidurl = %s", bid_url);
 
-	bid_body = malloc(strlen(bid_body_fmt) + 
+	bid_body = malloc(strlen(bid_body_fmt) +
 			  strlen(assertion) + strlen(audience));
 	sprintf(bid_body, bid_body_fmt, assertion, audience);
 	syslog(LOG_INFO, "bid_body = %s", bid_body);
@@ -145,11 +89,6 @@ int browserid_verify(const sasl_utils_t *utils,
 	browserid_response->valid_until = 0;
 	strcpy(browserid_response->reason, "");
 
-	y_handle = yajl_alloc(yajl_cbs, NULL, browserid_response);
-	if (!y_handle) {
-		syslog(LOG_ERR, "Could not alloc YAJL");
-	}
-
 	if (0 != curl_global_init(CURL_GLOBAL_SSL)) {
 		syslog(LOG_ERR, "curl_global_init was non-zero");
 		return -1;
@@ -159,7 +98,6 @@ int browserid_verify(const sasl_utils_t *utils,
 	if (handle == NULL) {
 		syslog(LOG_ERR, "Unable to curl_easy_init");
 	}
-
 	if (0 != curl_easy_setopt(handle, CURLOPT_URL, bid_url))
 		syslog(LOG_ERR, "curl setopt url failed");
 	if (0 != curl_easy_setopt(handle, CURLOPT_POST, 1))
@@ -168,31 +106,100 @@ int browserid_verify(const sasl_utils_t *utils,
 		syslog(LOG_ERR, "curl setopt postfields failed");
 	if (0 != curl_easy_setopt(handle, CURLOPT_FOLLOWLOCATION, 1))
 		syslog(LOG_DEBUG, "curl setopt follow");
-
 	if (0 != curl_easy_setopt(handle, CURLOPT_USE_SSL, CURLUSESSL_TRY))
 		syslog(LOG_DEBUG, "curl setopt ssl failed");
-
-	if (0 != curl_easy_setopt(handle, CURLOPT_WRITEFUNCTION, parse_json))
+	if (0 != curl_easy_setopt(handle, CURLOPT_WRITEFUNCTION,
+				  write_cb))
 		syslog(LOG_ERR, "curl setopt write fn failed");
 
-	if (0 != curl_easy_setopt(handle, CURLOPT_WRITEDATA, y_handle))
+	json_text.memory = malloc(JSON_BUFFER);
+	json_text.size = 0;
+	json_text.realsize = JSON_BUFFER;
+
+	if (0 != curl_easy_setopt(handle, CURLOPT_WRITEDATA, &json_text))
 		syslog(LOG_ERR, "curl setopt writedata failed");
 
 	code = curl_easy_perform(handle);
 
 	if (code == 0) {
-		syslog(LOG_DEBUG, "curl_easy_perform finished");
+		parse(json_text.memory, browserid_response);
 	} else {
-		syslog(LOG_EMERG, "curl_easy_perform failed [%u] %s", code, 
+		syslog(LOG_EMERG, "curl_easy_perform failed [%u] %s", code,
 		       curl_easy_strerror(code));
 		strcpy(browserid_response->status, "curl-error");
 		strcpy(browserid_response->reason, curl_easy_strerror(code));
 	}
 
-	yajl_complete_parse(y_handle);
-	yajl_free(y_handle);
-	
 	curl_easy_cleanup(handle);
 	free(bid_body);
 	return 1;
+}
+
+static int parse(const char* resp,
+		  struct browserid_response_t *browserid_response)
+{
+	yajl_val tree = NULL;
+	char err_buf[256];
+
+	tree = yajl_tree_parse(resp, err_buf, 255);
+
+	if (!tree) {
+		syslog(LOG_ERR, "Error parsing BrowserID response [%s]",
+		       err_buf);
+		return 1;
+	}
+	const char *status_path[] = { "status", (const char *) 0 };
+	yajl_val status = yajl_tree_get(tree, status_path, yajl_t_string);
+	if (!status) {
+		syslog(LOG_EMERG, "Expected field status is missing");
+		return 1;
+	}
+	strcpy(browserid_response->status, status->u.string);
+
+	if (strcasecmp(status->u.string, "okay") == 0) {
+		const char *email_path[] = { "email", (const char *) 0 };
+		const char *audience_path[] = { "audience", (const char *) 0 };
+		const char *issuer_path[] = { "issuer", (const char *) 0 };
+		const char *valid_path[] = { "valid-until", (const char *) 0 };
+
+		yajl_val email, audience, issuer, valid_until;
+
+		email = yajl_tree_get(tree, email_path, yajl_t_string);
+		if (!email) {
+			syslog(LOG_ERR, "Expected field email is missing");
+		} else {
+			strcpy(browserid_response->email, email->u.string);
+		}
+
+
+
+		audience = yajl_tree_get(tree, audience_path, yajl_t_string);
+		if (!audience) {
+			syslog(LOG_ERR, "Expected field audience is missing");
+		} else {
+			strcpy(browserid_response->audience, audience->u.string);
+		}
+
+		issuer = yajl_tree_get(tree, issuer_path, yajl_t_string);
+		if (!issuer) {
+			syslog(LOG_ERR, "Expected field issuer is missing");
+		} else {
+			strcpy(browserid_response->issuer, issuer->u.string);
+		}
+
+		valid_until = yajl_tree_get(tree, valid_path, yajl_t_number);
+		if (!valid_until) {
+			syslog(LOG_INFO, "Expected field valid-until is missing or not a number");
+		} else {
+			browserid_response->valid_until = valid_until->u.number.i;
+		}
+	} else {
+		const char *reason_path[] = { "reason", (const char *) 0 };
+		yajl_val reason = yajl_tree_get(tree, reason_path, yajl_t_string);
+		if (!reason) {
+			syslog(LOG_ERR, "Expected field reason is missing");
+		} else {
+			strcpy(browserid_response->reason, reason->u.string);
+		}
+	}
 }
