@@ -1,7 +1,7 @@
 Vagrant::Config.run do |config|
 
-    config.vm.box = "lucid32_1.box"
-    config.vm.box_url = "http://people.mozilla.org/~aking/sasl_browserid/lucid32_1.box"
+    config.vm.box = "lucid32_2.box"
+    config.vm.box_url = "http://people.mozilla.org/~aking/sasl_browserid/lucid32_2.box"
 
     #                               VM    localhost                       
     config.vm.forward_port("web",   80,   8080)

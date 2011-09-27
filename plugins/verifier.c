@@ -171,8 +171,6 @@ static int parse(const char* resp,
 			strcpy(browserid_response->email, email->u.string);
 		}
 
-
-
 		audience = yajl_tree_get(tree, audience_path, yajl_t_string);
 		if (!audience) {
 			syslog(LOG_ERR, "Expected field audience is missing");
@@ -201,5 +199,7 @@ static int parse(const char* resp,
 		} else {
 			strcpy(browserid_response->reason, reason->u.string);
 		}
+                return 1;
 	}
+        return 0;
 }
