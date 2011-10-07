@@ -18,7 +18,10 @@ import unittest
 
 class InstalledProperlyTestCase(unittest.TestCase):
     def test_pluginviewer_sees_browserid(self):
-        p = subprocess.Popen(['saslpluginviewer'], stdout=subprocess.PIPE)
+        try:
+            p = subprocess.Popen(['saslpluginviewer'], stdout=subprocess.PIPE)
+        except OSError:
+            p = subprocess.Popen(['pluginviewer'], stdout=subprocess.PIPE)
         p.wait()
         output = p.stdout.readlines()
         seen = self._parse_pv(output)

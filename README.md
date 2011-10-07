@@ -106,6 +106,8 @@ There are 3 ways to test, pluginviewer, slapd, and sample program.
 
 ### pluginviewer ###
 
+*Note:* On some systems this is called pluginviewer.
+
     sudo saslpluginviewer
 
 Do you see BROWSER-ID in the list of SASL client and server mechanisms?
