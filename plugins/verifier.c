@@ -106,8 +106,10 @@ int browserid_verify(const sasl_utils_t *utils,
 		syslog(LOG_ERR, "curl setopt postfields failed");
 	if (0 != curl_easy_setopt(handle, CURLOPT_FOLLOWLOCATION, 1))
 		syslog(LOG_DEBUG, "curl setopt follow");
+#ifdef CURLUSESSL_TRY
 	if (0 != curl_easy_setopt(handle, CURLOPT_USE_SSL, CURLUSESSL_TRY))
 		syslog(LOG_DEBUG, "curl setopt ssl failed");
+#endif
 	if (0 != curl_easy_setopt(handle, CURLOPT_WRITEFUNCTION,
 				  write_cb))
 		syslog(LOG_ERR, "curl setopt write fn failed");
