@@ -73,13 +73,8 @@ class NormalUsageTestCase(unittest.TestCase):
         email = 'jane@doe.com'
         audience = 'example.com'
         cur = self.db_conn.cursor()
-        try:
-            insert_session_row(cur, assertion, email)
-            #self.assertTrue(True)
-        except Exception, e:
-            raise e
-        finally:
-            cur.close()
+        insert_session_row(cur, assertion, email)
+        cur.close()
 
         sasl_creds = browserid(assertion, audience)
 
