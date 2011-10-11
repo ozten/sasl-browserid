@@ -5,5 +5,12 @@ MYSQL_HOST     = '127.0.0.1'
 #MYSQL_PORT     = 883306
 MYSQL_PORT     = 3306
 
-LDAP_URI       = 'ldap:///'
+LDAP_URI       = 'ldap://:1389/'
 #LDAP_URI       = 'ldap://:881389'
+LDAP_ROOT_DN   = 'cn=root,dc=example,dc=com'
+LDAP_ROOT_PASS = 'pass'
+SASL_BID_HOME  = '/home/vagrant/sasl-browserid'
+SLAPD_DB_PATH  = '/home/vagrant/openldap_db'
+SLAPD_CONFIG   = '/home/vagrant/sasl-browserid/test/slapd'
+SLAPD_PID      = '/home/vagrant/sasl-browserid/test/slapd/slapd.pid'
+SLAPD_LIB_PATH = '/usr/lib/sasl2'

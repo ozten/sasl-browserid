@@ -1,0 +1,21 @@
+####################
+# LDAP DIT structure
+####################
+#
+# The suffix (top of tree entry)
+#
+dn: dc=example,dc=com
+objectClass: top
+objectClass: dcObject
+objectclass: organization
+dc: example
+o: Examples
+
+
+dn: uid=jane@doe.com,dc=example,dc=com
+objectclass: person
+objectclass: uidObject
+cn: Jane Doe
+sn: Doe
+uid: jane@doe.com
+

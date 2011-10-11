@@ -13,3 +13,6 @@ config.status
 #	Makefile
 stamp-h1
 *.pyc
+test/config.py
+test/slapd/slapd.conf
+test/slapd/slapd.pid

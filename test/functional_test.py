@@ -13,9 +13,10 @@ import unittest
 import ldap
 from ldap.sasl import sasl, CB_USER, CB_AUTHNAME
 import MySQLdb
+import shutil
 
 import config
-
+import slapd
 
 class browserid(sasl):
     """This class handles SASL client input names for
@@ -55,15 +56,21 @@ class NormalUsageTestCase(unittest.TestCase):
         cursor.close()
 
         # OpenLDAP init
+        slapd.reset_db()
         self.ldap_conn = ldap.initialize(config.LDAP_URI)
 
     def tearDown(self):
         self.db_conn.close()
         self.ldap_conn.unbind_s()
 
+        # Replace normal good sasl2/slapd.conf
+        src = "%s/configs/slapd.conf" % config.SASL_BID_HOME
+        dest = "%s/slapd.conf" % config.SLAPD_LIB_PATH
+        shutil.copy(src, dest)
+
     def test_cached_assertion(self):
         assertion = '32lj432j4.some.really.long.string.23k4j23l4j'
-        email = 'test@home.net'
+        email = 'jane@doe.com'
         audience = 'example.com'
         cur = self.db_conn.cursor()
         try:
@@ -75,6 +82,31 @@ class NormalUsageTestCase(unittest.TestCase):
             cur.close()
 
         sasl_creds = browserid(assertion, audience)
+
+        slapd.wait_for_jane()
+
+        self.ldap_conn.sasl_interactive_bind_s("", sasl_creds)
+
+        expected_dn = "dn:uid=%s,dc=example,dc=com" % email
+        self.assertEqual(expected_dn, self.ldap_conn.whoami_s())
+
+    def test_cached_assertion_unknown_user(self):
+        assertion = '32lj432j4.some_other.really.long.string.23k4j23l4j'
+        email = 'unknown@user.com'
+        audience = 'example.com'
+        cur = self.db_conn.cursor()
+        try:
+            insert_session_row(cur, assertion, email)
+        except Exception, e:
+            raise e
+        finally:
+            cur.close()
+
+        sasl_creds = browserid(assertion, audience)
+
+        # we don't need name, but let directory get loaded
+        slapd.wait_for_jane()
+
         self.ldap_conn.sasl_interactive_bind_s("", sasl_creds)
 
         expected_dn = "dn:uid=%s,cn=browser-id,cn=auth" % email
@@ -129,13 +161,42 @@ class NormalUsageTestCase(unittest.TestCase):
         self.assertRaises(ldap.INVALID_CREDENTIALS, lambda:\
             self.ldap_conn.sasl_interactive_bind_s("", sasl_creds))
 
+    def test_no_browserid_auth_mech(self):
+        """
+
+        """
+        # Replace normal good sasl2/slapd.conf
+        src = "%s/test/sasl/no_browserid_slapd.conf" %\
+            config.SASL_BID_HOME
+        dest = "%s/slapd.conf" % config.SLAPD_LIB_PATH
+        shutil.copy(src, dest)
+
+        slapd.kill_slapd()
+        slapd.start_slapd()
+
+        self.ldap_conn = ldap.initialize(config.LDAP_URI)
+
+        assertion = '32lj432j4.an.assertion.23k4j23l4j'
+        audience = 'example.com'
+
+        sasl_creds = browserid(assertion, audience)
+        self.ldap_conn.bind_s('', '')
+
+
+        self.assertRaises(ldap.STRONG_AUTH_NOT_SUPPORTED, lambda:\
+            self.ldap_conn.sasl_interactive_bind_s("", sasl_creds))
+
     def xtest_to_write(self):
         """
         TODO:
         /usr/lib/sasl2/slapd.conf with no browserid_endpoint
+
+        Also fire up web server via python...
+        good json
+        bad json
+        etc
         """
         pass
-
 
 if __name__ == '__main__':
     unittest.main()
