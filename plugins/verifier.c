@@ -86,7 +86,7 @@ int browserid_verify(const sasl_utils_t *utils,
 	strcpy(browserid_response->email, "");
 	strcpy(browserid_response->audience, "");
 	strcpy(browserid_response->issuer, "");
-	browserid_response->valid_until = 0;
+	browserid_response->expires = 0;
 	strcpy(browserid_response->reason, "");
 
 	if (0 != curl_global_init(CURL_GLOBAL_SSL)) {
@@ -142,10 +142,12 @@ static int parse(const char* resp,
 {
 	yajl_val tree = NULL;
 	char err_buf[256];
+	char *fake = "{ \"status\": \"okay\", \"email\": \"eozten@yahoo.com\", \"audience\": \"localhost:8888\", \"expires\": 1320336390659, \"issuer\": \"browserid.org\" }";
 
 	tree = yajl_tree_parse(resp, err_buf, 255);
 
 	if (!tree) {
+		syslog(LOG_ERR, "bid resp=%s", resp);
 		syslog(LOG_ERR, "Error parsing BrowserID response [%s]",
 		       err_buf);
 		return 1;
@@ -153,6 +155,7 @@ static int parse(const char* resp,
 	const char *status_path[] = { "status", (const char *) 0 };
 	yajl_val status = yajl_tree_get(tree, status_path, yajl_t_string);
 	if (!status) {
+		syslog(LOG_ERR, "bid resp=%s", resp);
 		syslog(LOG_EMERG, "Expected field status is missing");
 		return 1;
 	}
@@ -162,9 +165,9 @@ static int parse(const char* resp,
 		const char *email_path[] = { "email", (const char *) 0 };
 		const char *audience_path[] = { "audience", (const char *) 0 };
 		const char *issuer_path[] = { "issuer", (const char *) 0 };
-		const char *valid_path[] = { "valid-until", (const char *) 0 };
+		const char *expires_path[] = { "expires", (const char *) 0 };
 
-		yajl_val email, audience, issuer, valid_until;
+		yajl_val email, audience, issuer, expires;
 
 		email = yajl_tree_get(tree, email_path, yajl_t_string);
 		if (!email) {
@@ -187,11 +190,11 @@ static int parse(const char* resp,
 			strcpy(browserid_response->issuer, issuer->u.string);
 		}
 
-		valid_until = yajl_tree_get(tree, valid_path, yajl_t_number);
-		if (!valid_until) {
-			syslog(LOG_INFO, "Expected field valid-until is missing or not a number");
+		expires = yajl_tree_get(tree, expires_path, yajl_t_number);
+		if (!expires) {
+			syslog(LOG_INFO, "Expected field expires is missing or not a number");
 		} else {
-			browserid_response->valid_until = valid_until->u.number.i;
+			browserid_response->expires = expires->u.number.i;
 		}
 	} else {
 		const char *reason_path[] = { "reason", (const char *) 0 };
@@ -201,7 +204,7 @@ static int parse(const char* resp,
 		} else {
 			strcpy(browserid_response->reason, reason->u.string);
 		}
-                return 1;
+		return 1;
 	}
-        return 0;
+	return 0;
 }

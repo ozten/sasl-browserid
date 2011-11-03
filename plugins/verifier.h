@@ -12,13 +12,13 @@
 #include "yajl/yajl_tree.h"
 
 struct browserid_response_t {
-  char state[64];
-  char status[64]; /* "okay" */
-  char email[1024]; /* shout@ozten.com */
-  char audience[1024]; /* mozillians.org */
-  long long valid_until; /* timeout */
-  char issuer[1024]; /* browserid.org:443 */
-  char reason[1024]; /* Set if status is failure */
+	char state[64];
+	char status[64]; /* "okay" */
+	char email[1024]; /* shout@ozten.com */
+	char audience[1024]; /* mozillians.org */
+	long long expires; /* timeout */
+	char issuer[1024]; /* browserid.org:443 */
+	char reason[1024]; /* Set if status is failure */
 };
 
 /**

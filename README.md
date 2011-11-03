@@ -114,8 +114,18 @@ Do you see BROWSER-ID in the list of SASL client and server mechanisms?
 
 ### OpenLDAP (slapd) ###
 
+Setup:
+
     sudo cp configs/slapd.conf /usr/lib/sasl2
-    ldapwhoami -Y BROWSER-ID -I
+    # restart slapd
+    cd test/www/
+    python -m SimpleHTTPServer 8001
+
+Each time
+
+    # request http://localhost:8001 in your browser and do BID login flow
+    A=eyJjZXJ0aWZpY2F0ZXMiOlsiZXlKaGJHY2...some_real_assertion_ekdNeGhGM05CM3diUXV6UzC
+    ldapwhoami -Y BROWSER-ID -I -X $A -U 'localhost:8001'
 
 ### Sample client and server ###
 If you've compiled SASL's sample/client and sample/server programs...

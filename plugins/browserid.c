@@ -50,6 +50,9 @@
 /* MAX_AUDIENCE 256 for max domain name length and some change for port number */
 #define MAX_AUDIENCE 300
 
+/* MAX_AUDIENCE 256 for max domain name length and some change for port number */
+#define MAX_EMAIL 254
+
 static const char plugin_id[] = "$Id: browserid.c,v 1.180 2011/08/11 17:00:00 mel Exp $";
 
 struct context;
@@ -84,6 +87,23 @@ static int browserid_server_mech_new(void *glob_context,
 	return SASL_OK;
 }
 
+static int _transmit_email(sasl_server_params_t *sparams,
+			   const char **serverout,
+			   unsigned *serveroutlen,
+			   char *email)
+{
+	*serveroutlen = strlen(email);
+	*serverout = sparams->utils->malloc(*serveroutlen);
+	if (*serverout == NULL) {
+		MEMERROR(sparams->utils);
+		return SASL_NOMEM;
+	}
+	strcpy(*serverout, email);
+	syslog(LOG_DEBUG, "Sending [%s] back to client", *serverout);
+	return SASL_OK;
+}
+
+
 /**
  * Core of the server plugin.
  */
@@ -104,7 +124,7 @@ static int browserid_server_mech_step(void *conn_context,
 	struct browserid_response_t *browserid_response;
 	char email[1024];
 
-	syslog(LOG_DEBUG, "browserid_server_mech_step clientinlen=%d", 
+	syslog(LOG_DEBUG, "browserid_server_mech_step clientinlen=%d",
 	       clientinlen);
 
 	/* should have received assertion NUL audience */
@@ -112,7 +132,6 @@ static int browserid_server_mech_step(void *conn_context,
 	/* get assertion */
 
 	assertion = clientin;
-
 
 	if (strlen(assertion) > MAX_ASSERTION) {
 		syslog(LOG_ERR, "Client send a longer assertion [%u] that we "
@@ -138,11 +157,11 @@ static int browserid_server_mech_step(void *conn_context,
 	audience_len = (unsigned) (clientin + lup - audience);
 	if (audience_len > MAX_AUDIENCE) {
 	    syslog(LOG_ERR, "Client send a longer audience [%u] that "
-		   "we expected, failing", 
+		   "we expected, failing",
 		   strlen(audience));
 		return SASL_BADPROT;
 	}
-	syslog(LOG_DEBUG, "lup = %d clientinlen = %d", lup, 
+	syslog(LOG_DEBUG, "lup = %d clientinlen = %d", lup,
 	       clientinlen);
 
 	if (lup != clientinlen) {
@@ -165,18 +184,19 @@ static int browserid_server_mech_step(void *conn_context,
 	syslog(LOG_DEBUG, "Server side, we've got ASSERTION[%s] AUDIENCE[%s]",
 	       assertion, audience_copy);
 
-
 	if (check_session(sparams->utils, assertion, (char *)&email) == 1) {
-		syslog(LOG_DEBUG, "Got email = %s", email);
+		syslog(LOG_DEBUG, "Found email = %s in session", email);
 		/* set user into the session or whatever... */
 		result = sparams->canon_user(sparams->utils->conn,
 					     email, 0,
-					     SASL_CU_AUTHID | SASL_CU_AUTHZID, 
+					     SASL_CU_AUTHID | SASL_CU_AUTHZID,
 					     oparams);
+		_transmit_email(sparams, serverout, serveroutlen, email);
 	} else {
+		syslog(LOG_DEBUG, "No session hit, using verifier");
 		browserid_response = malloc(sizeof(struct browserid_response_t));
 
-		browserid_verify(sparams->utils, browserid_response, 
+		browserid_verify(sparams->utils, browserid_response,
 				 assertion, audience_copy);
 
 		if (strcasecmp(browserid_response->status, "okay") == 0) {
@@ -184,20 +204,24 @@ static int browserid_server_mech_step(void *conn_context,
 			       browserid_response->email,
 			       browserid_response->audience,
 			       browserid_response->issuer,
-			       browserid_response->valid_until);
-			create_session(sparams->utils, assertion, 
+			       browserid_response->expires);
+			create_session(sparams->utils, assertion,
 				       browserid_response->email);
 			result = sparams->canon_user(sparams->utils->conn,
 						     browserid_response->email, 0,
 						     SASL_CU_AUTHID | SASL_CU_AUTHZID, oparams);
+
+
+			_transmit_email(sparams, serverout, serveroutlen, browserid_response->email);
+
 			if (result != SASL_OK) {
 				_plug_free_string(sparams->utils, &audience_copy);
 				free(browserid_response);
 				return result;
 			}
 		} else {
-			syslog(LOG_ERR, "No dice, STATUS=[%s] REASON=[%s]", 
-			       browserid_response->status, 
+			syslog(LOG_ERR, "No dice, STATUS=[%s] REASON=[%s]",
+			       browserid_response->status,
 			       browserid_response->reason);
 			SETERROR(sparams->utils, browserid_response->reason);
 
@@ -205,7 +229,6 @@ static int browserid_server_mech_step(void *conn_context,
 			free(browserid_response);
 			return SASL_BADAUTH;
 		}
-
 
 		free(browserid_response);
 	}
@@ -278,6 +301,7 @@ int browserid_server_plug_init(sasl_utils_t *utils,
 /*****************************	Client Section	*****************************/
 
 typedef struct client_context {
+	int state;
 	char *out_buf;
 	unsigned out_buf_len;
 } client_context_t;
@@ -300,17 +324,15 @@ static int browserid_client_mech_new(void *glob_context,
 	}
 
 	memset(context, 0, sizeof(client_context_t));
-
+	context->state = 1;
 	*conn_context = context;
 	return SASL_OK;
 }
 
 /**
- * Core of the client plugin. Does client side authentication... which
- * is none. Probably we need a two step where we get the server
- * to figure out the hard stuff.
+ * Figure out the user's assertion and audience then send to the server.
  */
-static int browserid_client_mech_step(void *conn_context,
+static int browserid_client_mech_step1(void *conn_context,
 				      sasl_client_params_t *params,
 				      const char *serverin,
 				      unsigned serverinlen,
@@ -326,7 +348,7 @@ static int browserid_client_mech_step(void *conn_context,
 	int result;
 	char *p;
 
-	syslog(LOG_DEBUG, "browserid_client_mech_new");
+	syslog(LOG_DEBUG, "browserid_client_mech_step1");
 
 	if (!params || !clientout || !clientoutlen || !oparams) {
 		PARAMERROR( params->utils );
@@ -405,20 +427,8 @@ static int browserid_client_mech_step(void *conn_context,
 		       "(%u), failing", strlen(browser_audience));
 		return SASL_BADPARAM;
 	}
-	syslog(LOG_DEBUG, "YO ASSERTION=[%s] AUDIENCE=[%s]", 
+	syslog(LOG_DEBUG, "YO ASSERTION=[%s] AUDIENCE=[%s]",
 	       browser_assertion, browser_audience);
-
-	result = params->canon_user(params->utils->conn, browser_assertion, 0,
-			   SASL_CU_AUTHZID, oparams);
-
-	if (result != SASL_OK) goto cleanup;
-
-	result = params->canon_user(params->utils->conn, browser_audience, 0,
-				    SASL_CU_AUTHID, oparams);
-
-	if (result != SASL_OK) goto cleanup;
-
-	syslog(LOG_DEBUG, "Got passed canon_user");
 
 	/* send assertion NUL audience NUL */
 	*clientoutlen = (strlen(browser_assertion) + 1 + strlen(browser_audience));
@@ -438,7 +448,53 @@ static int browserid_client_mech_step(void *conn_context,
 	memcpy(++p, oparams->authid, oparams->alen);
 	p += oparams->alen;
 
-	*clientout = context->out_buf;
+	p = params->utils->malloc(*clientoutlen);
+	strcpy(p, browser_assertion);
+	p += strlen(browser_assertion) + 1;
+	strcpy(p, browser_audience);
+	p -= strlen(browser_assertion) + 1;
+	*clientout = p;
+
+	context->state = 2;
+	return SASL_CONTINUE;
+
+ cleanup:
+	return result;
+}
+
+/**
+ * Read email address from server and canonicalize the userid and authname.
+ */
+static int browserid_client_mech_step2(void *conn_context,
+				      sasl_client_params_t *params,
+				      const char *serverin,
+				      unsigned serverinlen,
+				      sasl_interact_t **prompt_need,
+				      const char **clientout,
+				      unsigned *clientoutlen,
+				      sasl_out_params_t *oparams)
+{
+	client_context_t *context = (client_context_t *) conn_context;
+	char *email;
+	int result;
+
+	syslog(LOG_DEBUG, "browserid_client_mech_step2 serverinlen=%d", serverinlen);
+
+	/* should have received email NUL */
+	email = serverin;
+
+	if (strlen(email) > MAX_EMAIL) {
+		syslog(LOG_ERR, "Server sent a longer email [%u] that we "
+		       "expected, failing", strlen(email));
+		return SASL_BADPROT;
+	}
+
+	syslog(LOG_DEBUG, "client step2 seeing email=[%s]", email);
+
+	result = params->canon_user(params->utils->conn, email, 0,
+			   SASL_CU_AUTHID | SASL_CU_AUTHZID, oparams);
+
+	if (result != SASL_OK) goto cleanup;
 
 	oparams->doneflag = 1;
 	oparams->mech_ssf = 0;
@@ -452,7 +508,46 @@ static int browserid_client_mech_step(void *conn_context,
  cleanup:
 
 	/*return result;*/
-	return SASL_OK;
+	return result;
+}
+/**
+ * Core of the client plugin. Does client side authentication... which
+ * is none. Probably we need a two step where we get the server
+ * to figure out the hard stuff.
+ */
+static int browserid_client_mech_step(void *conn_context,
+				      sasl_client_params_t *params,
+				      const char *serverin,
+				      unsigned serverinlen,
+				      sasl_interact_t **prompt_need,
+				      const char **clientout,
+				      unsigned *clientoutlen,
+				      sasl_out_params_t *oparams)
+{
+	client_context_t *context = (client_context_t *) conn_context;
+	switch (context->state) {
+		case 1:
+			return browserid_client_mech_step1(conn_context,
+							  params,
+							  serverin,
+							  serverinlen,
+							  prompt_need,
+							  clientout,
+							  clientoutlen,
+							  oparams);
+		case 2:
+			return browserid_client_mech_step2(conn_context,
+							  params,
+							  serverin,
+							  serverinlen,
+							  prompt_need,
+							  clientout,
+							  clientoutlen,
+							  oparams);
+		default:
+			syslog(LOG_ERR, "Unknown state in client step %d", context->state);
+			return SASL_BADPARAM;
+	}
 }
 
 /**

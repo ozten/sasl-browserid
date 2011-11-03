@@ -12,7 +12,6 @@
 
 #include <session.h>
 
-#define MAX_EMAIL 1024
 
 static MYSQL * _connect(const sasl_utils_t *utils);
 
@@ -44,11 +43,11 @@ int check_session(const sasl_utils_t *utils, const char *assertion, char *email)
 	conn = _connect(utils);
 	if (conn == NULL) {
 		syslog(LOG_EMERG, "Unable to connect to mysql server");
-		syslog(LOG_EMERG, "Error %u: %s", mysql_errno(conn), 
+		syslog(LOG_EMERG, "Error %u: %s", mysql_errno(conn),
 		       mysql_error(conn));
 	}
 
-	mysql_real_escape_string(conn, assertion_esc, assertion, 
+	mysql_real_escape_string(conn, assertion_esc, assertion,
 				 strlen(assertion));
 	sprintf(select_email_esc, select_email, assertion_esc);
 	syslog(LOG_DEBUG, "Sending %s", select_email_esc);
@@ -61,7 +60,7 @@ int check_session(const sasl_utils_t *utils, const char *assertion, char *email)
 			rv = 1;
 
 			/* Touch session */
-			sprintf(update_session_esc, update_session, 
+			sprintf(update_session_esc, update_session,
 				assertion_esc);
 			syslog(LOG_DEBUG, "Sending %s", update_session_esc);
 			mysql_query(conn, update_session_esc);
@@ -76,7 +75,7 @@ int check_session(const sasl_utils_t *utils, const char *assertion, char *email)
 		   query_rs == CR_SERVER_LOST) {
 		syslog(LOG_ERR, "Lost connection to MySQL");
 	} else {
-		syslog(LOG_ERR, "Error %u: %s\n", mysql_errno(conn), 
+		syslog(LOG_ERR, "Error %u: %s\n", mysql_errno(conn),
 		       mysql_error(conn));
 	}
 	mysql_close(conn);
@@ -88,33 +87,33 @@ int create_session(const sasl_utils_t *utils, const char *assertion, const char 
 	MYSQL *conn;
 	int query_rs;
 
-	char assertion_esc[300];
+	char assertion_esc[3000];
 	char email_esc[300];
 	char *insert_email = "INSERT INTO browserid_session (digest, email) "
 			     "VALUES (MD5('%s'), '%s')";
-	char insert_email_esc[MAX_EMAIL];
+	char insert_email_esc[3300];
 	int rv = 0;
 
 	conn = _connect(utils);
 	if (conn == NULL) {
-		syslog(LOG_EMERG, "Error %u: %s\n", mysql_errno(conn), 
+		syslog(LOG_EMERG, "Error %u: %s\n", mysql_errno(conn),
 		       mysql_error(conn));
 		syslog(LOG_EMERG, "Unable to connect to mysql server");
 		return 0;
 	}
-	mysql_real_escape_string(conn, assertion_esc, assertion, 
+	mysql_real_escape_string(conn, assertion_esc, assertion,
 				 strlen(assertion));
 	mysql_real_escape_string(conn, email_esc, email, strlen(email));
 
 	sprintf(insert_email_esc, insert_email, assertion_esc, email_esc);
-	syslog(LOG_DEBUG, "Sending %s", insert_email_esc);
+	syslog(LOG_DEBUG, "INSERT SQL [%s]", insert_email_esc);
 	if ((query_rs = mysql_query(conn, insert_email_esc)) == 0) {
 		if (mysql_affected_rows(conn) == 1) {
 			syslog(LOG_DEBUG, "Successfully created a session\n");
 			rv = 1;
 		} else {
-			syslog(LOG_WARNING, 
-			       "WARN: %llu rows affected, expected 1", 
+			syslog(LOG_WARNING,
+			       "WARN: %llu rows affected, expected 1",
 			       mysql_affected_rows(conn));
 		}
 	} else if (query_rs == CR_UNKNOWN_ERROR) {
@@ -123,7 +122,7 @@ int create_session(const sasl_utils_t *utils, const char *assertion, const char 
 		   query_rs == CR_SERVER_LOST) {
 		syslog(LOG_ERR, "Lost Mysql Connection");
 	} else {
-		syslog(LOG_ERR, "Error %u: %s\n", mysql_errno(conn), 
+		syslog(LOG_ERR, "Error %u: %s\n", mysql_errno(conn),
 		       mysql_error(conn));
 	}
 	mysql_close(conn);

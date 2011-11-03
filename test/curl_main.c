@@ -117,6 +117,7 @@ main (int argc, char **argv) {
         syslog(LOG_DEBUG, "inputs %s %s", argv[1], argv[2]);
     }
 
+    DANGER... THIS CODE IS OUT OF DATE... verify only accepts POST NOW
     bid_url_fmt = "https://browserid.org/verify?assertion=%s&audience=%s";
      /*"http://localhost:8001/en-US/media/js/browserid.json";*/
     
