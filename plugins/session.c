@@ -29,14 +29,14 @@ int check_session(const sasl_utils_t *utils, const char *assertion, char *email)
 	MYSQL_RES *rs;
 	MYSQL_ROW row;
 
-	char assertion_esc[strlen(assertion) + 20]; /* TODO... */
+	char assertion_esc[strlen(assertion) * 2];
 	char *select_email =
 	    "SELECT email FROM browserid_session WHERE digest = MD5('%s')";
-	char select_email_esc[strlen(select_email) + strlen(assertion) + 1];
+	char select_email_esc[(strlen(select_email) + strlen(assertion)) * 2];
 
 	char *update_session = "UPDATE browserid_session SET created = NOW() "
 			       "WHERE digest = MD5('%s')";
-	char update_session_esc[strlen(update_session) + strlen(assertion) + 1];
+	char update_session_esc[(strlen(update_session) + strlen(assertion)) * 2];
 
 	int rv = 0;
 
@@ -87,11 +87,11 @@ int create_session(const sasl_utils_t *utils, const char *assertion, const char 
 	MYSQL *conn;
 	int query_rs;
 
-	char assertion_esc[3000];
-	char email_esc[300];
+	char assertion_esc[strlen(assertion) * 2];
+	char email_esc[strlen(email) * 2];
 	char *insert_email = "INSERT INTO browserid_session (digest, email) "
 			     "VALUES (MD5('%s'), '%s')";
-	char insert_email_esc[3300];
+	char insert_email_esc[(strlen(assertion) + strlen(email)) *2];
 	int rv = 0;
 
 	conn = _connect(utils);

@@ -79,7 +79,7 @@ int browserid_verify(const sasl_utils_t *utils,
 	bid_body = malloc(strlen(bid_body_fmt) +
 			  strlen(assertion) + strlen(audience));
 	sprintf(bid_body, bid_body_fmt, assertion, audience);
-	syslog(LOG_INFO, "bid_body = %s", bid_body);
+	syslog(LOG_INFO, "bid_body = %d %s", strlen(bid_body), bid_body);
 
 	strcpy(browserid_response->state, "");
 	strcpy(browserid_response->status, "");
@@ -106,10 +106,8 @@ int browserid_verify(const sasl_utils_t *utils,
 		syslog(LOG_ERR, "curl setopt postfields failed");
 	if (0 != curl_easy_setopt(handle, CURLOPT_FOLLOWLOCATION, 1))
 		syslog(LOG_DEBUG, "curl setopt follow");
-#ifdef CURLUSESSL_TRY
-	if (0 != curl_easy_setopt(handle, CURLOPT_USE_SSL, CURLUSESSL_TRY))
+	if (0 != curl_easy_setopt(handle, CURLOPT_USE_SSL, CURLUSESSL_ALL))
 		syslog(LOG_DEBUG, "curl setopt ssl failed");
-#endif
 	if (0 != curl_easy_setopt(handle, CURLOPT_WRITEFUNCTION,
 				  write_cb))
 		syslog(LOG_ERR, "curl setopt write fn failed");
@@ -142,8 +140,6 @@ static int parse(const char* resp,
 {
 	yajl_val tree = NULL;
 	char err_buf[256];
-	char *fake = "{ \"status\": \"okay\", \"email\": \"eozten@yahoo.com\", \"audience\": \"localhost:8888\", \"expires\": 1320336390659, \"issuer\": \"browserid.org\" }";
-
 	tree = yajl_tree_parse(resp, err_buf, 255);
 
 	if (!tree) {

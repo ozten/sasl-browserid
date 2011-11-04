@@ -44,13 +44,13 @@
 #include <session.h>
 #include <verifier.h>
 
-/* MAX_ASSERTION 3000 characters, TODO verify if this will be be standardized */
-#define MAX_ASSERTION 3000
+/* MAX_ASSERTION length which BrowserID generates */
+#define MAX_ASSERTION 4000
 
-/* MAX_AUDIENCE 256 for max domain name length and some change for port number */
+/* MAX_AUDIENCE 256 for protocol, domain nam, and padding for port number */
 #define MAX_AUDIENCE 300
 
-/* MAX_AUDIENCE 256 for max domain name length and some change for port number */
+/* MAX_EMAIL length */
 #define MAX_EMAIL 254
 
 static const char plugin_id[] = "$Id: browserid.c,v 1.180 2011/08/11 17:00:00 mel Exp $";
@@ -122,7 +122,7 @@ static int browserid_server_mech_step(void *conn_context,
 	int result;
 	char *audience_copy;
 	struct browserid_response_t *browserid_response;
-	char email[1024];
+	char email[MAX_EMAIL];
 
 	syslog(LOG_DEBUG, "browserid_server_mech_step clientinlen=%d",
 	       clientinlen);
@@ -205,12 +205,19 @@ static int browserid_server_mech_step(void *conn_context,
 			       browserid_response->audience,
 			       browserid_response->issuer,
 			       browserid_response->expires);
+
+                        if (strcasecmp(browserid_response->audience, audience_copy) != 0) {
+                            syslog(LOG_ERR, "BAD Audience, expected [%s] != [%s]", 
+                                   audience_copy, browserid_response->audience);
+                            return SASL_BADAUTH;
+                        }
+
 			create_session(sparams->utils, assertion,
 				       browserid_response->email);
 			result = sparams->canon_user(sparams->utils->conn,
 						     browserid_response->email, 0,
-						     SASL_CU_AUTHID | SASL_CU_AUTHZID, oparams);
-
+						     SASL_CU_AUTHID | SASL_CU_AUTHZID, 
+                                                     oparams);
 
 			_transmit_email(sparams, serverout, serveroutlen, browserid_response->email);
 
@@ -219,6 +226,7 @@ static int browserid_server_mech_step(void *conn_context,
 				free(browserid_response);
 				return result;
 			}
+
 		} else {
 			syslog(LOG_ERR, "No dice, STATUS=[%s] REASON=[%s]",
 			       browserid_response->status,
