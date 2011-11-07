@@ -195,9 +195,16 @@ static int browserid_server_mech_step(void *conn_context,
 	} else {
 		syslog(LOG_DEBUG, "No session hit, using verifier");
 		browserid_response = malloc(sizeof(struct browserid_response_t));
+		if (browserid_response == NULL) {
+			MEMERROR(sparams->utils);
+			return SASL_NOMEM;
+		}
 
-		browserid_verify(sparams->utils, browserid_response,
-				 assertion, audience_copy);
+		result = browserid_verify(sparams->utils, browserid_response,
+					  assertion, audience_copy);
+		if (result != 1) {
+		    return result;
+		}
 
 		if (strcasecmp(browserid_response->status, "okay") == 0) {
 			syslog(LOG_DEBUG, "Yes, we're all good! %s %s %s until %llu",
@@ -206,18 +213,18 @@ static int browserid_server_mech_step(void *conn_context,
 			       browserid_response->issuer,
 			       browserid_response->expires);
 
-                        if (strcasecmp(browserid_response->audience, audience_copy) != 0) {
-                            syslog(LOG_ERR, "BAD Audience, expected [%s] != [%s]", 
-                                   audience_copy, browserid_response->audience);
-                            return SASL_BADAUTH;
-                        }
+			if (strcasecmp(browserid_response->audience, audience_copy) != 0) {
+			    syslog(LOG_ERR, "BAD Audience, expected [%s] != [%s]",
+				   audience_copy, browserid_response->audience);
+			    return SASL_BADAUTH;
+			}
 
 			create_session(sparams->utils, assertion,
 				       browserid_response->email);
 			result = sparams->canon_user(sparams->utils->conn,
 						     browserid_response->email, 0,
-						     SASL_CU_AUTHID | SASL_CU_AUTHZID, 
-                                                     oparams);
+						     SASL_CU_AUTHID | SASL_CU_AUTHZID,
+						     oparams);
 
 			_transmit_email(sparams, serverout, serveroutlen, browserid_response->email);
 
@@ -457,6 +464,11 @@ static int browserid_client_mech_step1(void *conn_context,
 	p += oparams->alen;
 
 	p = params->utils->malloc(*clientoutlen);
+	if (p == NULL) {
+		MEMERROR( params->utils );
+		return SASL_NOMEM;
+	}
+
 	strcpy(p, browser_assertion);
 	p += strlen(browser_assertion) + 1;
 	strcpy(p, browser_audience);

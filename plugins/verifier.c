@@ -7,7 +7,11 @@
 #include <curl/curl.h>
 #include <sasl/sasl.h> /* saslplug.h should have included this ?!? */
 #include <sasl/saslplug.h>
+#include "plugin_common.h"
+
 #include "yajl/yajl_tree.h"
+
+
 
 #include <verifier.h>
 
@@ -18,6 +22,7 @@ struct json_response {
   char *memory;
   size_t size;
   size_t realsize;
+  int memerr;
 };
 
 /** Callback function for streaming CURL response */
@@ -29,9 +34,19 @@ static size_t write_cb(void *contents, size_t size, size_t nmemb, void *userp)
 	if (mem->size + realsize >= mem->realsize) {
 		mem->realsize = mem->size + realsize + JSON_BUFFER;
 		void *tmp = malloc(mem->size + realsize + JSON_BUFFER);
+		if (tmp == NULL) {
+			syslog(LOG_ERR, "Unable to grow json_response tmp buffer");
+			mem->memerr = 1;
+			return realsize;
+		}
 		memcpy(tmp, mem->memory, mem->size);
 		free(mem->memory);
 		mem->memory = malloc(mem->size + realsize + JSON_BUFFER);
+		if (mem->memory == NULL) {
+			syslog(LOG_ERR, "Unable to grow json_response memory slot");
+			mem->memerr = 1;
+			return realsize;
+		}
 		memcpy(mem->memory, tmp, mem->size);
 		free(tmp);
 	}
@@ -78,6 +93,10 @@ int browserid_verify(const sasl_utils_t *utils,
 
 	bid_body = malloc(strlen(bid_body_fmt) +
 			  strlen(assertion) + strlen(audience));
+	if (bid_body == NULL) {
+		MEMERROR( utils );
+		return SASL_NOMEM;
+	}
 	sprintf(bid_body, bid_body_fmt, assertion, audience);
 	syslog(LOG_INFO, "bid_body = %d %s", strlen(bid_body), bid_body);
 
@@ -112,14 +131,24 @@ int browserid_verify(const sasl_utils_t *utils,
 				  write_cb))
 		syslog(LOG_ERR, "curl setopt write fn failed");
 
-	json_text.memory = malloc(JSON_BUFFER);
 	json_text.size = 0;
+	json_text.memerr = 0;
 	json_text.realsize = JSON_BUFFER;
+	json_text.memory = malloc(JSON_BUFFER);
+	if (json_text.memory == NULL) {
+		MEMERROR( utils );
+		return SASL_NOMEM;
+	}
 
 	if (0 != curl_easy_setopt(handle, CURLOPT_WRITEDATA, &json_text))
 		syslog(LOG_ERR, "curl setopt writedata failed");
 
 	code = curl_easy_perform(handle);
+
+	if (json_text.memerr == 1) {
+		MEMERROR( utils );
+		return SASL_NOMEM;
+	}
 
 	if (code == 0) {
 		parse(json_text.memory, browserid_response);
