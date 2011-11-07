@@ -29,10 +29,16 @@ struct json_response {
 static size_t write_cb(void *contents, size_t size, size_t nmemb, void *userp)
 {
 	size_t realsize = size * nmemb;
+	size_t nextsize;
 	struct json_response *mem = (struct json_response *)userp;
 
 	if (mem->size + realsize >= mem->realsize) {
-		mem->realsize = mem->size + realsize + JSON_BUFFER;
+		nextsize = mem->size + realsize + JSON_BUFFER;
+		if (nextsize < mem->realsize) {
+			syslog(LOG_ERR, "Buffer Overflow, ignoring new contents");
+			return realsize;
+		}
+		mem->realsize = nextsize;
 		void *tmp = malloc(mem->size + realsize + JSON_BUFFER);
 		if (tmp == NULL) {
 			syslog(LOG_ERR, "Unable to grow json_response tmp buffer");
@@ -110,12 +116,13 @@ int browserid_verify(const sasl_utils_t *utils,
 
 	if (0 != curl_global_init(CURL_GLOBAL_SSL)) {
 		syslog(LOG_ERR, "curl_global_init was non-zero");
-		return -1;
+		return SASL_FAIL;
 	}
 
 	handle = curl_easy_init();
 	if (handle == NULL) {
 		syslog(LOG_ERR, "Unable to curl_easy_init");
+		return SASL_FAIL;
 	}
 	if (0 != curl_easy_setopt(handle, CURLOPT_URL, bid_url))
 		syslog(LOG_ERR, "curl setopt url failed");
@@ -151,7 +158,7 @@ int browserid_verify(const sasl_utils_t *utils,
 	}
 
 	if (code == 0) {
-		parse(json_text.memory, browserid_response);
+		r = parse(json_text.memory, browserid_response);
 	} else {
 		syslog(LOG_EMERG, "curl_easy_perform failed [%u] %s", code,
 		       curl_easy_strerror(code));
@@ -161,7 +168,7 @@ int browserid_verify(const sasl_utils_t *utils,
 
 	curl_easy_cleanup(handle);
 	free(bid_body);
-	return 1;
+	return r;
 }
 
 static int parse(const char* resp,
@@ -169,21 +176,29 @@ static int parse(const char* resp,
 {
 	yajl_val tree = NULL;
 	char err_buf[256];
+
+	syslog(LOG_DEBUG, "beginning parse");
+
 	tree = yajl_tree_parse(resp, err_buf, 255);
 
 	if (!tree) {
 		syslog(LOG_ERR, "bid resp=%s", resp);
 		syslog(LOG_ERR, "Error parsing BrowserID response [%s]",
 		       err_buf);
-		return 1;
+		return SASL_FAIL;
 	}
+
+	syslog(LOG_DEBUG, "Obtained parser tree");
+
 	const char *status_path[] = { "status", (const char *) 0 };
 	yajl_val status = yajl_tree_get(tree, status_path, yajl_t_string);
 	if (!status) {
 		syslog(LOG_ERR, "bid resp=%s", resp);
 		syslog(LOG_EMERG, "Expected field status is missing");
-		return 1;
+		return SASL_FAIL;
 	}
+	syslog(LOG_DEBUG, "Obtained status %s", status);
+
 	strcpy(browserid_response->status, status->u.string);
 
 	if (strcasecmp(status->u.string, "okay") == 0) {
@@ -229,7 +244,7 @@ static int parse(const char* resp,
 		} else {
 			strcpy(browserid_response->reason, reason->u.string);
 		}
-		return 1;
+		return SASL_FAIL;
 	}
-	return 0;
+	return SASL_OK;
 }

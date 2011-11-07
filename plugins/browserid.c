@@ -202,7 +202,7 @@ static int browserid_server_mech_step(void *conn_context,
 
 		result = browserid_verify(sparams->utils, browserid_response,
 					  assertion, audience_copy);
-		if (result != 1) {
+		if (result != SASL_OK) {
 		    return result;
 		}
 
