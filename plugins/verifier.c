@@ -124,19 +124,31 @@ int browserid_verify(const sasl_utils_t *utils,
 		syslog(LOG_ERR, "Unable to curl_easy_init");
 		return SASL_FAIL;
 	}
-	if (0 != curl_easy_setopt(handle, CURLOPT_URL, bid_url))
+	if (0 != curl_easy_setopt(handle, CURLOPT_URL, bid_url)) {
 		syslog(LOG_ERR, "curl setopt url failed");
-	if (0 != curl_easy_setopt(handle, CURLOPT_POST, 1))
+		return SASL_FAIL;
+        }
+	if (0 != curl_easy_setopt(handle, CURLOPT_POST, 1)) {
 		syslog(LOG_ERR, "curl setopt post failed");
-	if (0 != curl_easy_setopt(handle, CURLOPT_POSTFIELDS, bid_body))
+		return SASL_FAIL;
+        }
+	if (0 != curl_easy_setopt(handle, CURLOPT_POSTFIELDS, bid_body)) {
 		syslog(LOG_ERR, "curl setopt postfields failed");
-	if (0 != curl_easy_setopt(handle, CURLOPT_FOLLOWLOCATION, 1))
+		return SASL_FAIL;
+        }
+	if (0 != curl_easy_setopt(handle, CURLOPT_FOLLOWLOCATION, 1)) {
 		syslog(LOG_DEBUG, "curl setopt follow");
-	if (0 != curl_easy_setopt(handle, CURLOPT_USE_SSL, CURLUSESSL_ALL))
+		return SASL_FAIL;
+        }
+	if (0 != curl_easy_setopt(handle, CURLOPT_USE_SSL, CURLUSESSL_ALL)) {
 		syslog(LOG_DEBUG, "curl setopt ssl failed");
+		return SASL_FAIL;
+        }
 	if (0 != curl_easy_setopt(handle, CURLOPT_WRITEFUNCTION,
-				  write_cb))
+				  write_cb)) {
 		syslog(LOG_ERR, "curl setopt write fn failed");
+		return SASL_FAIL;
+        }
 
 	json_text.size = 0;
 	json_text.memerr = 0;
@@ -147,8 +159,10 @@ int browserid_verify(const sasl_utils_t *utils,
 		return SASL_NOMEM;
 	}
 
-	if (0 != curl_easy_setopt(handle, CURLOPT_WRITEDATA, &json_text))
+	if (0 != curl_easy_setopt(handle, CURLOPT_WRITEDATA, &json_text)) {
 		syslog(LOG_ERR, "curl setopt writedata failed");
+		return SASL_FAIL;
+        }
 
 	code = curl_easy_perform(handle);
 
