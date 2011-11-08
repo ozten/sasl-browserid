@@ -92,8 +92,8 @@ static int _transmit_email(sasl_server_params_t *sparams,
 			   unsigned *serveroutlen,
 			   char *email)
 {
-	*serveroutlen = strlen(email) + 1;
-	*serverout = sparams->utils->malloc(*serveroutlen);
+	*serveroutlen = strlen(email);
+	*serverout = sparams->utils->malloc(*serveroutlen + 1);
 	if (*serverout == NULL) {
 		MEMERROR(sparams->utils);
 		return SASL_NOMEM;
@@ -154,36 +154,34 @@ static int browserid_server_mech_step(void *conn_context,
 	audience = clientin + lup;
 	while ((lup < clientinlen) && (clientin[lup] != 0)) ++lup;
 
-	audience_len = (unsigned) (clientin + lup - audience) + 1;
+	audience_len = (unsigned) (clientin + lup - audience);
 	if (audience_len > MAX_AUDIENCE) {
 	    syslog(LOG_ERR, "Client send a longer audience [%u] that "
 		   "we expected, failing",
 		   strlen(audience));
 		return SASL_BADPROT;
 	}
-        ++lup;
 	syslog(LOG_DEBUG, "lup = %d clientinlen = %d", lup,
 	       clientinlen);
 
 	if (lup != clientinlen) {
 		SETERROR(sparams->utils,
-			 "Oh snap, more data than we were expecting in the "
-			 "BROWSER-ID plugin\n");
+			 "Client sent more data than the two fields we were expecting");
 		return SASL_BADPROT;
 	}
 
 	/* Ensure null terminated */
-	audience_copy = sparams->utils->malloc(audience_len);
+	audience_copy = sparams->utils->malloc(audience_len + 1);
 	if (audience_copy == NULL) {
 		MEMERROR(sparams->utils);
 		return SASL_NOMEM;
 	}
 
 	strncpy(audience_copy, audience, audience_len);
-	audience_copy[audience_len - 1] = '\0';
+	audience_copy[audience_len] = '\0';
 
-	syslog(LOG_DEBUG, "Server side, we've got ASSERTION[%s] AUDIENCE[%s]",
-	       assertion, audience_copy);
+	syslog(LOG_DEBUG, "Server side, we've got AUDIENCE[%s] ASSERTION[%s]",
+	       audience_copy, assertion);
 
 	if (check_session(sparams->utils, assertion, (char *)&email) == 1) {
 		syslog(LOG_DEBUG, "Found email = %s in session", email);
@@ -447,7 +445,7 @@ static int browserid_client_mech_step1(void *conn_context,
 	       browser_assertion, browser_audience);
 
 	/* send assertion NUL audience NUL */
-	*clientoutlen = (strlen(browser_assertion) + 1 + strlen(browser_audience) + 1);
+	*clientoutlen = (strlen(browser_assertion) + 1 + strlen(browser_audience));
 
 	syslog(LOG_DEBUG, "clientoutlen is going to be %u", *clientoutlen);
 
@@ -456,13 +454,6 @@ static int browserid_client_mech_step1(void *conn_context,
 	if (result != SASL_OK) goto cleanup;
 
 	memset(context->out_buf, 0, *clientoutlen);
-	p = context->out_buf;
-	if (browser_assertion && *browser_assertion) {
-		memcpy(p, oparams->user, oparams->ulen);
-		p += oparams->ulen;
-	}
-	memcpy(++p, oparams->authid, oparams->alen);
-	p += oparams->alen;
 
 	p = params->utils->malloc(*clientoutlen);
 	if (p == NULL) {
