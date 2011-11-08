@@ -93,7 +93,7 @@ static int _transmit_email(sasl_server_params_t *sparams,
 			   char *email)
 {
 	*serveroutlen = strlen(email);
-	*serverout = sparams->utils->malloc(*serveroutlen);
+	*serverout = sparams->utils->malloc(*serveroutlen + 1);
 	if (*serverout == NULL) {
 		MEMERROR(sparams->utils);
 		return SASL_NOMEM;
@@ -166,9 +166,8 @@ static int browserid_server_mech_step(void *conn_context,
 
 	if (lup != clientinlen) {
 		SETERROR(sparams->utils,
-			 "Oh snap, more data than we were expecting in the "
-			 "BROWSER-ID plugin\n");
-
+			 "Client sent more data than the two fields we were expecting");
+		return SASL_BADPROT;
 	}
 
 	/* Ensure null terminated */
@@ -181,8 +180,8 @@ static int browserid_server_mech_step(void *conn_context,
 	strncpy(audience_copy, audience, audience_len);
 	audience_copy[audience_len] = '\0';
 
-	syslog(LOG_DEBUG, "Server side, we've got ASSERTION[%s] AUDIENCE[%s]",
-	       assertion, audience_copy);
+	syslog(LOG_DEBUG, "Server side, we've got AUDIENCE[%s] ASSERTION[%s]",
+	       audience_copy, assertion);
 
 	if (check_session(sparams->utils, assertion, (char *)&email) == 1) {
 		syslog(LOG_DEBUG, "Found email = %s in session", email);
@@ -451,17 +450,10 @@ static int browserid_client_mech_step1(void *conn_context,
 	syslog(LOG_DEBUG, "clientoutlen is going to be %u", *clientoutlen);
 
 	result = _plug_buf_alloc(params->utils, &(context->out_buf),
-				 &(context->out_buf_len), *clientoutlen +1);
+				 &(context->out_buf_len), *clientoutlen);
 	if (result != SASL_OK) goto cleanup;
 
-	memset(context->out_buf, 0, *clientoutlen + 1);
-	p = context->out_buf;
-	if (browser_assertion && *browser_assertion) {
-		memcpy(p, oparams->user, oparams->ulen);
-		p += oparams->ulen;
-	}
-	memcpy(++p, oparams->authid, oparams->alen);
-	p += oparams->alen;
+	memset(context->out_buf, 0, *clientoutlen);
 
 	p = params->utils->malloc(*clientoutlen);
 	if (p == NULL) {
