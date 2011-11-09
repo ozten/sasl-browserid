@@ -106,13 +106,13 @@ int browserid_verify(const sasl_utils_t *utils,
 	sprintf(bid_body, bid_body_fmt, assertion, audience);
 	syslog(LOG_INFO, "bid_body = %d %s", strlen(bid_body), bid_body);
 
-	strcpy(browserid_response->state, "");
-	strcpy(browserid_response->status, "");
-	strcpy(browserid_response->email, "");
-	strcpy(browserid_response->audience, "");
-	strcpy(browserid_response->issuer, "");
+	CHECKED_COPY(browserid_response->state, "");
+	CHECKED_COPY(browserid_response->status, "");
+	CHECKED_COPY(browserid_response->email, "");
+	CHECKED_COPY(browserid_response->audience, "");
+	CHECKED_COPY(browserid_response->issuer, "");
 	browserid_response->expires = 0;
-	strcpy(browserid_response->reason, "");
+	CHECKED_COPY(browserid_response->reason, "");
 
 	if (0 != curl_global_init(CURL_GLOBAL_SSL)) {
 		syslog(LOG_ERR, "curl_global_init was non-zero");
@@ -176,8 +176,8 @@ int browserid_verify(const sasl_utils_t *utils,
 	} else {
 		syslog(LOG_EMERG, "curl_easy_perform failed [%u] %s", code,
 		       curl_easy_strerror(code));
-		strcpy(browserid_response->status, "curl-error");
-		strcpy(browserid_response->reason, curl_easy_strerror(code));
+		CHECKED_COPY(browserid_response->status, "curl-error");
+		CHECKED_COPY(browserid_response->reason, curl_easy_strerror(code));
 	}
 
 	curl_easy_cleanup(handle);
@@ -213,7 +213,7 @@ static int parse(const char* resp,
 	}
 	syslog(LOG_DEBUG, "Obtained status %s", status);
 
-	strcpy(browserid_response->status, status->u.string);
+	CHECKED_COPY(browserid_response->status, status->u.string);
 
 	if (strcasecmp(status->u.string, "okay") == 0) {
 		const char *email_path[] = { "email", (const char *) 0 };
@@ -227,21 +227,21 @@ static int parse(const char* resp,
 		if (!email) {
 			syslog(LOG_ERR, "Expected field email is missing");
 		} else {
-			strcpy(browserid_response->email, email->u.string);
+			CHECKED_COPY(browserid_response->email, email->u.string);
 		}
 
 		audience = yajl_tree_get(tree, audience_path, yajl_t_string);
 		if (!audience) {
 			syslog(LOG_ERR, "Expected field audience is missing");
 		} else {
-			strcpy(browserid_response->audience, audience->u.string);
+			CHECKED_COPY(browserid_response->audience, audience->u.string);
 		}
 
 		issuer = yajl_tree_get(tree, issuer_path, yajl_t_string);
 		if (!issuer) {
 			syslog(LOG_ERR, "Expected field issuer is missing");
 		} else {
-			strcpy(browserid_response->issuer, issuer->u.string);
+			CHECKED_COPY(browserid_response->issuer, issuer->u.string);
 		}
 
 		expires = yajl_tree_get(tree, expires_path, yajl_t_number);
@@ -256,7 +256,7 @@ static int parse(const char* resp,
 		if (!reason) {
 			syslog(LOG_ERR, "Expected field reason is missing");
 		} else {
-			strcpy(browserid_response->reason, reason->u.string);
+			CHECKED_COPY(browserid_response->reason, reason->u.string);
 		}
 		return SASL_FAIL;
 	}

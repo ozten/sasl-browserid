@@ -27,4 +27,13 @@ struct browserid_response_t {
  */
 int browserid_verify(const sasl_utils_t *utils, struct browserid_response_t *browserid_response, const char *assertion, const char *audience);
 
+#define CHECKED_COPY(dst, src) \
+  do { \
+    if (strlen((src)) < sizeof((dst)) / sizeof((dst)[0])) { \
+      strcpy((dst), (src)); \
+    } else { \
+      /** need to return error */ \
+    } \
+  } while (0)
+
 #endif /* VERIFIER_H */
