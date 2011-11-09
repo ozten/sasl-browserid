@@ -32,18 +32,26 @@ static size_t write_cb(void *contents, size_t size, size_t nmemb, void *userp)
 	size_t nextsize;
 	struct json_response *mem = (struct json_response *)userp;
 
+        /** check for multiplication overflow */
+        if (size != 0 && nmemb != 0 && realsize < size) {
+            /** CURL spec says number of bytes handled should be returned
+             * http://curl.haxx.se/libcurl/c/curl_easy_setopt.html
+             */
+                syslog(LOG_ERR, "Integer Overflow early, ignoring new contents");
+                return 0;
+        }
 	if (mem->size + realsize >= mem->realsize) {
 		nextsize = mem->size + realsize + JSON_BUFFER;
 		if (nextsize < mem->realsize) {
-			syslog(LOG_ERR, "Buffer Overflow, ignoring new contents");
-			return realsize;
+			syslog(LOG_ERR, "Integer Overflow, ignoring new contents");
+			return 0;
 		}
 		mem->realsize = nextsize;
 		void *tmp = malloc(mem->size + realsize + JSON_BUFFER);
 		if (tmp == NULL) {
 			syslog(LOG_ERR, "Unable to grow json_response tmp buffer");
 			mem->memerr = 1;
-			return realsize;
+			return 0;
 		}
 		memcpy(tmp, mem->memory, mem->size);
 		free(mem->memory);
@@ -51,7 +59,7 @@ static size_t write_cb(void *contents, size_t size, size_t nmemb, void *userp)
 		if (mem->memory == NULL) {
 			syslog(LOG_ERR, "Unable to grow json_response memory slot");
 			mem->memerr = 1;
-			return realsize;
+			return 0;
 		}
 		memcpy(mem->memory, tmp, mem->size);
 		free(tmp);
