@@ -11,14 +11,16 @@
 #include "yajl/yajl_parse.h"
 #include "yajl/yajl_tree.h"
 
+#define MAX_STATUS 64
+#define MAX_RESP_FIELD 1024
+
 struct browserid_response_t {
-	char state[64];
-	char status[64]; /* "okay" */
-	char email[1024]; /* shout@ozten.com */
-	char audience[1024]; /* mozillians.org */
+	char status[MAX_STATUS]; /* "okay" */
+	char email[MAX_RESP_FIELD]; /* shout@ozten.com */
+	char audience[MAX_RESP_FIELD]; /* mozillians.org */
 	long long expires; /* timeout */
-	char issuer[1024]; /* browserid.org:443 */
-	char reason[1024]; /* Set if status is failure */
+	char issuer[MAX_RESP_FIELD]; /* browserid.org:443 */
+	char reason[MAX_RESP_FIELD]; /* Set if status is failure */
 };
 
 /**

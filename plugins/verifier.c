@@ -114,7 +114,6 @@ int browserid_verify(const sasl_utils_t *utils,
 	sprintf(bid_body, bid_body_fmt, assertion, audience);
 	syslog(LOG_INFO, "bid_body = %d %s", strlen(bid_body), bid_body);
 
-	strcpy(browserid_response->state, "");
 	strcpy(browserid_response->status, "");
 	strcpy(browserid_response->email, "");
 	strcpy(browserid_response->audience, "");
@@ -214,9 +213,9 @@ static int parse(const char* resp,
 
 	const char *status_path[] = { "status", (const char *) 0 };
 	yajl_val status = yajl_tree_get(tree, status_path, yajl_t_string);
-	if (!status) {
-		syslog(LOG_ERR, "bid resp=%s", resp);
-		syslog(LOG_EMERG, "Expected field status is missing");
+	if (!status || strlen(status->u.string) >= MAX_STATUS) {
+		syslog(LOG_EMERG, "bid resp=%s", resp);
+		syslog(LOG_EMERG, "Expected field status is missing or too large");
 		return SASL_FAIL;
 	}
 	syslog(LOG_DEBUG, "Obtained status %s", status);
@@ -232,24 +231,35 @@ static int parse(const char* resp,
 		yajl_val email, audience, issuer, expires;
 
 		email = yajl_tree_get(tree, email_path, yajl_t_string);
-		if (!email) {
-			syslog(LOG_ERR, "Expected field email is missing");
+		if (!email || strlen(email->u.string) >= MAX_RESP_FIELD) {
+                        /* Can't continue without email */
+                        syslog(LOG_ERR, "bid resp=%s", resp);
+			syslog(LOG_ERR, "Expected field email is missing or too large.");
+                        return SASL_FAIL;
 		} else {
-			strcpy(browserid_response->email, email->u.string);
+                        strcpy(browserid_response->email, email->u.string);
 		}
 
 		audience = yajl_tree_get(tree, audience_path, yajl_t_string);
 		if (!audience) {
 			syslog(LOG_ERR, "Expected field audience is missing");
 		} else {
-			strcpy(browserid_response->audience, audience->u.string);
+                        if (strlen(audience->u.string) < MAX_RESP_FIELD) {
+			        strcpy(browserid_response->audience, audience->u.string);
+                        } else {
+                                syslog(LOG_WARNING, "Audience is too large, skipping");
+                        }
 		}
 
 		issuer = yajl_tree_get(tree, issuer_path, yajl_t_string);
 		if (!issuer) {
 			syslog(LOG_ERR, "Expected field issuer is missing");
 		} else {
-			strcpy(browserid_response->issuer, issuer->u.string);
+                        if (strlen(issuer->u.string) < MAX_RESP_FIELD) {
+                            strcpy(browserid_response->issuer, issuer->u.string);
+                        } else {
+                                syslog(LOG_WARNING, "Issuer is too large, skipping");
+                        }			
 		}
 
 		expires = yajl_tree_get(tree, expires_path, yajl_t_number);
@@ -264,7 +274,12 @@ static int parse(const char* resp,
 		if (!reason) {
 			syslog(LOG_ERR, "Expected field reason is missing");
 		} else {
-			strcpy(browserid_response->reason, reason->u.string);
+                        if (strlen(reason->u.string) < MAX_RESP_FIELD) {
+                            strcpy(browserid_response->reason, reason->u.string);
+                        } else {
+                                syslog(LOG_WARNING, "BrowserID verifier failure reason is too large to copy, skipping.");
+                        }
+			
 		}
 		return SASL_FAIL;
 	}
