@@ -106,7 +106,7 @@ int browserid_verify(const sasl_utils_t *utils,
 	syslog(LOG_INFO, "bidurl = %s", bid_url);
 
 	bid_body = malloc(strlen(bid_body_fmt) +
-			  strlen(assertion) + strlen(audience));
+			  strlen(assertion) + strlen(audience) + 1);
 	if (bid_body == NULL) {
 		MEMERROR( utils );
 		return SASL_NOMEM;
