@@ -184,7 +184,12 @@ int browserid_verify(const sasl_utils_t *utils,
 		syslog(LOG_EMERG, "curl_easy_perform failed [%u] %s", code,
 		       curl_easy_strerror(code));
 		strcpy(browserid_response->status, "curl-error");
-		strcpy(browserid_response->reason, curl_easy_strerror(code));
+                if (strlen(curl_easy_strerror(code)) < MAX_RESP_FIELD) {
+                        strcpy(browserid_response->reason, curl_easy_strerror(code));
+                } else {
+                        syslog(LOG_ERR, curl_easy_strerror(code));
+                        strcpy(browserid_response->reason, "Curl failed, error message too large see syslog.");
+                }
 	}
 
 	curl_easy_cleanup(handle);
@@ -198,7 +203,7 @@ static int parse(const char* resp,
 	yajl_val tree = NULL;
 	char err_buf[256];
 
-	syslog(LOG_DEBUG, "beginning parse");
+	syslog(LOG_DEBUG, "beginning parse %s", resp);
 
 	tree = yajl_tree_parse(resp, err_buf, 255);
 
@@ -218,7 +223,7 @@ static int parse(const char* resp,
 		syslog(LOG_EMERG, "Expected field status is missing or too large");
 		return SASL_FAIL;
 	}
-	syslog(LOG_DEBUG, "Obtained status %s", status);
+	syslog(LOG_DEBUG, "Obtained status %s", status->u.string);
 
 	strcpy(browserid_response->status, status->u.string);
 
