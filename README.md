@@ -1,5 +1,5 @@
 # SASL BrowserID #
-SASL BrowserID is a new [SASL mechanism](http://asg.web.cmu.edu/sasl/sasl-library.html).
+SASL BrowserID is a new [SASL mechanism](http://asg.web.cmu.edu/sasl/sasl-library.html) for client and servers who want to authenticate using BrowserID.
 
 Who da what?
 
@@ -14,19 +14,11 @@ This project aims to provide a plugin written in C for the popular CMU Cyrus SAS
 * ??? Tell us other use cases!
 
 ## Status ##
-Not ready for prime-time.
-
-This codebase is roughly the happy case, but needs much <3.
-
-We'd love your help!
-
-* C Hackers
-* Make Masters
-* Cross-platform Funsters
+Early stages of deployment within Mozilla.
 
 ## Security Notes ##
 
-1. Don't use this in a production system.
+1. Contact us before using in a production system.
 
 2. Make sure the client and server applications recognize and 
 [block unknown email addresses](docs/security_block_unknown_email.md)!
@@ -44,10 +36,10 @@ Otherwise...
 ## Requirements ##
 This plugin is under development on i686 Ubuntu 10.04 with:
 
-* Cyrus SASL 2.1.23
-* OpenLDAP 2.4.23
+* Cyrus SASL 2.1.23 or later
+* OpenLDAP 2.4.23 or later
 * libcurl
-* [yajl](https://github.com/lloyd/yajl) 2.0.2
+* [yajl](https://github.com/lloyd/yajl) 2.0.2 or later
 * MySQL client libraries for C
 
 ### Ubuntu Tips ###
@@ -78,7 +70,11 @@ Assuming you have the requirements installed, you can:
 
 This will create libbrowserid plugins under /usr/lib/sasl2
 
-Details can be found in the INSTALL doc or 
+Configure any sasl enabled servers. Example: see configs/slapd.conf.fragment.txt
+
+Restart any sasl enabled servers, such as slapd.
+
+Configuration details can be found in the INSTALL doc or 
 
     ./configure --help
 
@@ -89,18 +85,15 @@ Details can be found in the INSTALL doc or
     $ exit
     $ mysql -u root -p sasl_browserid < configs/browserid_session.ddl
 
+You know how a BrowserID enabled server. Next let's make sure things are working...
+
 ## Sanity Tests ##
 
 The following are ways to test this plugin.
 
-For all of the following tests, it's best to
+For all of the following tests, it's best to watch syslog
 
     sudo tail -f /var/log/auth.log
-
-When prompted for an Assertion and Audience, use browserid_debug.html and a local webserver. Example:
-
-    Assertion: eyJhbGci...blah...blah...2mtVg68723mlBPAQds_bPsG8mllYg
-    Audience: localhost:8001
 
 There are 3 ways to test, pluginviewer, slapd, and sample program.
 
@@ -112,6 +105,18 @@ There are 3 ways to test, pluginviewer, slapd, and sample program.
 
 Do you see BROWSER-ID in the list of SASL client and server mechanisms?
 
+### Test values for assertion and audience ###
+
+Where tests below require an Assertion and Audience, use browserid_debug.html and a local webserver. Example:
+
+    $ cd test/www/
+    $ python -m SimpleHTTPServer 8001
+
+Point your browser at http://locahost:8001/browserid_debug.html
+
+    Assertion: eyJhbGci...blah...blah...2mtVg68723mlBPAQds_bPsG8mllYg
+    Audience: localhost:8001
+
 ### OpenLDAP (slapd) ###
 
 Setup:
@@ -119,7 +124,6 @@ Setup:
     sudo cp configs/slapd.conf /usr/lib/sasl2
     # restart slapd
     cd test/www/
-    python -m SimpleHTTPServer 8001
 
 Each time
 
