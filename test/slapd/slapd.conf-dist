@@ -1,4 +1,4 @@
-pidfile   /home/vagrant/sasl-browserid/test/slapd/slapd.pid
+pidfile   /var/run/slapd/slapd.pid
 
 modulepath /usr/lib/ldap
 moduleload back_bdb.la
