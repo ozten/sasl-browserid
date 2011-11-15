@@ -10,6 +10,7 @@ import config as conf
 
 
 def reset_db():
+    # don't remove subdirectory so we keep permissions
     for f in glob.glob('%s/*' % conf.SLAPD_DB_PATH):
         os.remove(f)
 
@@ -35,7 +36,7 @@ def kill_slapd():
       return
 
     with open(pidfile, 'r') as f:
-        pid = int(f.readline().rstrip())
+        pid = int(f.readline().strip())
         try:  
             os.kill(pid, SIGTERM)
         except:
@@ -44,6 +45,8 @@ def kill_slapd():
 
 def start_slapd():
     config = "%s/slapd.conf" % conf.SLAPD_CONFIG
+    # run under openldap account
+    # TODO: integrate with /etc/init.d/slapd
     args = ['/usr/sbin/slapd',
             '-h', conf.LDAP_URI,
             '-f', config,
@@ -53,6 +56,7 @@ def start_slapd():
     call(args)
 
     while not os.path.exists(conf.SLAPD_PID):
+      print "slapd not started! Sleeping 1 second"
       time.sleep(1)
 
 def wait_for_jane():
@@ -70,4 +74,5 @@ def wait_for_jane():
             continue
 
 if __name__ == '__main__':
+    restart_slapd()
     reset_db()
