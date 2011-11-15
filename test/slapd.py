@@ -1,19 +1,17 @@
 import ldap
 import os
 import shutil
+import time
+import glob
+from signal import SIGTERM
 from subprocess import Popen, call
 
 import config as conf
 
 
 def reset_db():
-
-    kill_slapd()
-
-    shutil.rmtree(conf.SLAPD_DB_PATH)
-    os.mkdir(conf.SLAPD_DB_PATH)
-
-    start_slapd()
+    for f in glob.glob('%s/*' % conf.SLAPD_DB_PATH):
+        os.remove(f)
 
     # load data
     users = "%s/users.ldif" % conf.SLAPD_CONFIG
@@ -24,33 +22,38 @@ def reset_db():
         '-w', 'pass',
         '-a', '-f', users
     ]
-    Popen(args)
+    call(args)
 
+
+def restart_slapd():
+    kill_slapd()
+    start_slapd()
 
 def kill_slapd():
-    try:
+    pidfile = conf.SLAPD_PID
+    if not os.path.exists(pidfile):
+      return
 
-        f = open("%s/slapd.pid" % conf.SLAPD_CONFIG, 'r')
-        pid = f.readline().rstrip()
-        f.close()
-        Popen(['kill', pid])
-        os.remove("%s/slapd.pid" % conf.SLAPD_CONFIG)
-        return True
-    except Exception:
-        return False
+    with open(pidfile, 'r') as f:
+        pid = int(f.readline().rstrip())
+        try:  
+            os.kill(pid, SIGTERM)
+        except:
+            pass
+        os.remove(pidfile)
 
 def start_slapd():
     config = "%s/slapd.conf" % conf.SLAPD_CONFIG
-    call(['slapd', '-h', conf.LDAP_URI, '-f', config])
+    args = ['/usr/sbin/slapd',
+            '-h', conf.LDAP_URI,
+            '-f', config,
+            '-u', 'openldap',
+            '-g', 'openldap']
 
-    while True:
-        try:
-            conn = ldap.initialize(conf.LDAP_URI)
-            conn.bind('', '')
-            break
-        except ldap.SERVER_DOWN:
-            #print "still starting up"
-            continue
+    call(args)
+
+    while not os.path.exists(conf.SLAPD_PID):
+      time.sleep(1)
 
 def wait_for_jane():
     """Function attempts to detect when jane@doe.com is in 
