@@ -164,6 +164,7 @@ static int browserid_server_mech_step(void *conn_context,
 	syslog(LOG_DEBUG, "lup = %d clientinlen = %d", lup,
 	       clientinlen);
 
+        ++lup;
 	if (lup != clientinlen) {
 		SETERROR(sparams->utils,
 			 "Client sent more data than the two fields we were expecting");
@@ -445,7 +446,7 @@ static int browserid_client_mech_step1(void *conn_context,
 	       browser_assertion, browser_audience);
 
 	/* send assertion NUL audience NUL */
-	*clientoutlen = (strlen(browser_assertion) + 1 + strlen(browser_audience));
+	*clientoutlen = (strlen(browser_assertion) + 1 + strlen(browser_audience) + 1);
 
 	syslog(LOG_DEBUG, "clientoutlen is going to be %u", *clientoutlen);
 
@@ -518,8 +519,6 @@ static int browserid_client_mech_step2(void *conn_context,
 	oparams->param_version = 0;
 
  cleanup:
-
-	/*return result;*/
 	return result;
 }
 /**
