@@ -90,6 +90,7 @@ int browserid_verify(const sasl_utils_t *utils,
 	const char *bid_url;
 	char *bid_body;
 	char *bid_body_fmt = "assertion=%s&audience=%s";
+	const char *ca_info;
 	struct json_response json_text;
 	char *resp;
 
@@ -151,6 +152,21 @@ int browserid_verify(const sasl_utils_t *utils,
 		syslog(LOG_DEBUG, "curl setopt ssl failed");
 		return SASL_FAIL;
         }
+
+	r = utils->getopt(utils->getopt_context, "BROWSER-ID",
+			  "curl_ca_info", &ca_info, NULL);
+	if (r || !ca_info) {
+		syslog(LOG_DEBUG, "curl will use standard cert bundles.");
+		bid_url =
+		    "https://browserid.org/verify";
+	} else {
+            syslog(LOG_DEBUG, "curl using cert from %s", ca_info);
+		if (0 != curl_easy_setopt(handle, CURLOPT_CAINFO, ca_info)) {
+			syslog(LOG_DEBUG, "curl setopt cainfo failed");
+			return SASL_FAIL;
+        	}            
+        }
+
 	if (0 != curl_easy_setopt(handle, CURLOPT_WRITEFUNCTION,
 				  write_cb)) {
 		syslog(LOG_ERR, "curl setopt write fn failed");
