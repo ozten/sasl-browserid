@@ -153,7 +153,7 @@ main (int argc, char **argv) {
     if (0 != curl_easy_setopt(handle, CURLOPT_FOLLOWLOCATION, 1))
         syslog(LOG_DEBUG, "curl setopt follow");
 
-    if (0 != curl_easy_setopt(handle, CURLOPT_USE_SSL, CURLUSESSL_TRY))
+    if (0 != curl_easy_setopt(handle, CURLOPT_USE_SSL, CURLUSESSL_ALL))
         syslog(LOG_DEBUG, "curl setopt ssl failed");
 
     if (0 != curl_easy_setopt(handle, CURLOPT_WRITEFUNCTION, parse_json))
