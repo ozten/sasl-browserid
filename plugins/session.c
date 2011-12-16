@@ -2,7 +2,6 @@
 
 #include <stdio.h>
 #include <string.h>
-#include <syslog.h>
 
 #include <mysql.h>
 #include <mysql/errmsg.h>
@@ -22,7 +21,7 @@ static MYSQL * _connect(const sasl_utils_t *utils);
  */
 int check_session(const sasl_utils_t *utils, const char *assertion, char *email)
 {
-	syslog(LOG_DEBUG, "MySQL client version: %s\n",
+	utils->log(NULL, SASL_LOG_DEBUG, "MySQL client version: %s\n",
 	       mysql_get_client_info());
 	MYSQL *conn;
 	int query_rs;
@@ -42,27 +41,27 @@ int check_session(const sasl_utils_t *utils, const char *assertion, char *email)
 
 	conn = _connect(utils);
 	if (conn == NULL) {
-		syslog(LOG_EMERG, "Unable to connect to mysql server");
-		syslog(LOG_EMERG, "Error %u: %s", mysql_errno(conn),
+		utils->log(NULL, SASL_LOG_ERR, "Unable to connect to mysql server");
+		utils->log(NULL, SASL_LOG_ERR, "Error %u: %s", mysql_errno(conn),
 		       mysql_error(conn));
 	}
 
 	mysql_real_escape_string(conn, assertion_esc, assertion,
 				 strlen(assertion));
 	sprintf(select_email_esc, select_email, assertion_esc);
-	syslog(LOG_DEBUG, "Sending %s", select_email_esc);
+	utils->log(NULL, SASL_LOG_DEBUG, "Sending %s", select_email_esc);
 
 	if ((query_rs = mysql_query(conn, select_email_esc)) == 0) {
 		rs = mysql_store_result(conn);
 		while((row = mysql_fetch_row(rs))) {
-			syslog(LOG_DEBUG, "msyql email: %s", row[0]);
+			utils->log(NULL, SASL_LOG_DEBUG, "msyql email: %s", row[0]);
 			strcpy(email, row[0]);
 			rv = 1;
 
 			/* Touch session */
 			sprintf(update_session_esc, update_session,
 				assertion_esc);
-			syslog(LOG_DEBUG, "Sending %s", update_session_esc);
+			utils->log(NULL, SASL_LOG_DEBUG, "Sending %s", update_session_esc);
 			mysql_query(conn, update_session_esc);
 			break;
 		}
@@ -70,12 +69,12 @@ int check_session(const sasl_utils_t *utils, const char *assertion, char *email)
 			mysql_free_result(rs);
 		}
 	} else if (query_rs == CR_UNKNOWN_ERROR) {
-		syslog(LOG_ERR, "Unkown Error");
+		utils->log(NULL, SASL_LOG_ERR, "Unkown Error");
 	} else if (query_rs == CR_SERVER_GONE_ERROR ||	\
 		   query_rs == CR_SERVER_LOST) {
-		syslog(LOG_ERR, "Lost connection to MySQL");
+		utils->log(NULL, SASL_LOG_ERR, "Lost connection to MySQL");
 	} else {
-		syslog(LOG_ERR, "Error %u: %s\n", mysql_errno(conn),
+		utils->log(NULL, SASL_LOG_ERR, "Error %u: %s\n", mysql_errno(conn),
 		       mysql_error(conn));
 	}
 	mysql_close(conn);
@@ -96,9 +95,9 @@ int create_session(const sasl_utils_t *utils, const char *assertion, const char 
 
 	conn = _connect(utils);
 	if (conn == NULL) {
-		syslog(LOG_EMERG, "Error %u: %s\n", mysql_errno(conn),
+		utils->log(NULL, SASL_LOG_ERR, "Error %u: %s\n", mysql_errno(conn),
 		       mysql_error(conn));
-		syslog(LOG_EMERG, "Unable to connect to mysql server");
+		utils->log(NULL, SASL_LOG_ERR, "Unable to connect to mysql server");
 		return 0;
 	}
 	mysql_real_escape_string(conn, assertion_esc, assertion,
@@ -106,23 +105,23 @@ int create_session(const sasl_utils_t *utils, const char *assertion, const char 
 	mysql_real_escape_string(conn, email_esc, email, strlen(email));
 
 	sprintf(insert_email_esc, insert_email, assertion_esc, email_esc);
-	syslog(LOG_DEBUG, "INSERT SQL [%s]", insert_email_esc);
+	utils->log(NULL, SASL_LOG_DEBUG, "INSERT SQL [%s]", insert_email_esc);
 	if ((query_rs = mysql_query(conn, insert_email_esc)) == 0) {
 		if (mysql_affected_rows(conn) == 1) {
-			syslog(LOG_DEBUG, "Successfully created a session\n");
+			utils->log(NULL, SASL_LOG_DEBUG, "Successfully created a session\n");
 			rv = 1;
 		} else {
-			syslog(LOG_WARNING,
+			utils->log(NULL, SASL_LOG_WARN,
 			       "WARN: %llu rows affected, expected 1",
 			       mysql_affected_rows(conn));
 		}
 	} else if (query_rs == CR_UNKNOWN_ERROR) {
-		syslog(LOG_ERR, "Unkown Error");
+		utils->log(NULL, SASL_LOG_ERR, "Unkown Error");
 	} else if (query_rs == CR_SERVER_GONE_ERROR ||	\
 		   query_rs == CR_SERVER_LOST) {
-		syslog(LOG_ERR, "Lost Mysql Connection");
+		utils->log(NULL, SASL_LOG_ERR, "Lost Mysql Connection");
 	} else {
-		syslog(LOG_ERR, "Error %u: %s\n", mysql_errno(conn),
+		utils->log(NULL, SASL_LOG_ERR, "Error %u: %s\n", mysql_errno(conn),
 		       mysql_error(conn));
 	}
 	mysql_close(conn);
@@ -167,12 +166,12 @@ static MYSQL * _connect(const sasl_utils_t *utils)
 	} else {
 		sscanf(port_s, "%u", &port);
 	}
-	syslog(LOG_DEBUG, "mysql real connect with host=[%s] user=[%s] "
+	utils->log(NULL, SASL_LOG_DEBUG, "mysql real connect with host=[%s] user=[%s] "
 	       "pass=[%s] for %s on port %u",
 	       host, user, passwd, db, port);
 	conn = mysql_init(NULL);
 	if (conn == NULL) {
-		syslog(LOG_EMERG, "Unable to mysql_init, this can't end well.");
+		utils->log(NULL, SASL_LOG_ERR, "Unable to mysql_init, this can't end well.");
 	}
 	return mysql_real_connect(conn, host, user, passwd, db, port, NULL, 0);
 }

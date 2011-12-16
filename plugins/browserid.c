@@ -22,7 +22,6 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#include <syslog.h>
 #ifndef macintosh
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -55,8 +54,6 @@
 
 static const char plugin_id[] = "$Id: browserid.c,v 1.180 2011/08/11 17:00:00 mel Exp $";
 
-struct context;
-
 static const unsigned short version = 5;
 
 /*****************************	Common Section	*****************************/
@@ -67,7 +64,7 @@ static const unsigned short version = 5;
 static void browserid_common_mech_free(void *glob_context,
 				       const sasl_utils_t *utils)
 {
-	syslog(LOG_DEBUG, "browserid_common_mech_free");
+	utils->log(NULL, SASL_LOG_DEBUG, "browserid_common_mech_free");
 	return;
 }
 
@@ -83,7 +80,7 @@ static int browserid_server_mech_new(void *glob_context,
 				     unsigned challen __attribute__((unused)),
 				     void **conn_context)
 {
-	syslog(LOG_DEBUG, "browserid_server_mech_new");
+	sparams->utils->log(NULL, SASL_LOG_DEBUG, "browserid_server_mech_new");
 	return SASL_OK;
 }
 
@@ -99,7 +96,7 @@ static int _transmit_email(sasl_server_params_t *sparams,
 		return SASL_NOMEM;
 	}
 	strcpy(*serverout, email);
-	syslog(LOG_DEBUG, "Sending [%s] back to client", *serverout);
+	sparams->utils->log(NULL, SASL_LOG_DEBUG, "Sending [%s] back to client", *serverout);
 	return SASL_OK;
 }
 
@@ -124,7 +121,7 @@ static int browserid_server_mech_step(void *conn_context,
 	struct browserid_response_t *browserid_response;
 	char email[MAX_EMAIL];
 
-	syslog(LOG_DEBUG, "browserid_server_mech_step clientinlen=%d",
+	sparams->utils->log(NULL, SASL_LOG_DEBUG, "browserid_server_mech_step clientinlen=%d",
 	       clientinlen);
 
 	/* should have received assertion NUL audience */
@@ -134,12 +131,12 @@ static int browserid_server_mech_step(void *conn_context,
 	assertion = clientin;
 
 	if (strlen(assertion) > MAX_ASSERTION) {
-		syslog(LOG_ERR, "Client send a longer assertion [%u] that we "
+		sparams->utils->log(NULL, SASL_LOG_ERR, "Client send a longer assertion [%u] that we "
 		       "expected, failing", strlen(assertion));
 		return SASL_BADPROT;
 	}
 
-	syslog(LOG_DEBUG, "Assertion: [%s]", assertion);
+	sparams->utils->log(NULL, SASL_LOG_DEBUG, "Assertion: [%s]", assertion);
 
 	while ((lup < clientinlen) && (clientin[lup] != 0)) ++lup;
 
@@ -156,15 +153,15 @@ static int browserid_server_mech_step(void *conn_context,
 
 	audience_len = (unsigned) (clientin + lup - audience);
 	if (audience_len > MAX_AUDIENCE) {
-	    syslog(LOG_ERR, "Client send a longer audience [%u] that "
+	    sparams->utils->log(NULL, SASL_LOG_ERR, "Client send a longer audience [%u] that "
 		   "we expected, failing",
 		   strlen(audience));
 		return SASL_BADPROT;
 	}
-	syslog(LOG_DEBUG, "lup = %d clientinlen = %d", lup,
+	sparams->utils->log(NULL, SASL_LOG_DEBUG, "lup = %d clientinlen = %d", lup,
 	       clientinlen);
 
-        ++lup;
+	++lup;
 	if (lup != clientinlen) {
 		SETERROR(sparams->utils,
 			 "Client sent more data than the two fields we were expecting");
@@ -181,11 +178,11 @@ static int browserid_server_mech_step(void *conn_context,
 	strncpy(audience_copy, audience, audience_len);
 	audience_copy[audience_len] = '\0';
 
-	syslog(LOG_DEBUG, "Server side, we've got AUDIENCE[%s] ASSERTION[%s]",
+	sparams->utils->log(NULL, SASL_LOG_DEBUG, "Server side, we've got AUDIENCE[%s] ASSERTION[%s]",
 	       audience_copy, assertion);
 
 	if (check_session(sparams->utils, assertion, (char *)&email) == 1) {
-		syslog(LOG_DEBUG, "Found email = %s in session", email);
+		sparams->utils->log(NULL, SASL_LOG_DEBUG, "Found email = %s in session", email);
 		/* set user into the session or whatever... */
 		result = sparams->canon_user(sparams->utils->conn,
 					     email, 0,
@@ -193,7 +190,7 @@ static int browserid_server_mech_step(void *conn_context,
 					     oparams);
 		_transmit_email(sparams, serverout, serveroutlen, email);
 	} else {
-		syslog(LOG_DEBUG, "No session hit, using verifier");
+		sparams->utils->log(NULL, SASL_LOG_DEBUG, "No session hit, using verifier");
 		browserid_response = malloc(sizeof(struct browserid_response_t));
 		if (browserid_response == NULL) {
 			MEMERROR(sparams->utils);
@@ -207,14 +204,14 @@ static int browserid_server_mech_step(void *conn_context,
 		}
 
 		if (strcasecmp(browserid_response->status, "okay") == 0) {
-			syslog(LOG_DEBUG, "Yes, we're all good! %s %s %s until %llu",
+			sparams->utils->log(NULL, SASL_LOG_DEBUG, "Yes, we're all good! %s %s %s until %llu",
 			       browserid_response->email,
 			       browserid_response->audience,
 			       browserid_response->issuer,
 			       browserid_response->expires);
 
 			if (strcasecmp(browserid_response->audience, audience_copy) != 0) {
-			    syslog(LOG_ERR, "BAD Audience, expected [%s] != [%s]",
+			    sparams->utils->log(NULL, SASL_LOG_ERR, "BAD Audience, expected [%s] != [%s]",
 				   audience_copy, browserid_response->audience);
 			    return SASL_BADAUTH;
 			}
@@ -235,7 +232,7 @@ static int browserid_server_mech_step(void *conn_context,
 			}
 
 		} else {
-			syslog(LOG_ERR, "No dice, STATUS=[%s] REASON=[%s]",
+			sparams->utils->log(NULL, SASL_LOG_ERR, "No dice, STATUS=[%s] REASON=[%s]",
 			       browserid_response->status,
 			       browserid_response->reason);
 			SETERROR(sparams->utils, browserid_response->reason);
@@ -268,7 +265,7 @@ static int browserid_server_mech_step(void *conn_context,
 static void browserid_server_mech_dispose(void *conn_context,
 					  const sasl_utils_t *utils)
 {
-	syslog(LOG_DEBUG, "browserid_server_mech_dispose");
+	utils->log(NULL, SASL_LOG_DEBUG, "browserid_server_mech_dispose");
 	return;
 }
 
@@ -300,8 +297,7 @@ int browserid_server_plug_init(sasl_utils_t *utils,
 			       sasl_server_plug_t **pluglist,
 			       int *plugcount)
 {
-	openlog("browserid-server", LOG_NDELAY, LOG_AUTH);
-	syslog(LOG_DEBUG, "browserid_server_plug_init");
+	utils->log(NULL, SASL_LOG_DEBUG, "browserid_server_plug_init");
 	if (maxversion < SASL_SERVER_PLUG_VERSION) {
 		SETERROR( utils, "ANONYMOUS version mismatch" );
 		return SASL_BADVERS;
@@ -329,7 +325,7 @@ static int browserid_client_mech_new(void *glob_context,
 				     sasl_client_params_t * params,
 				     void **conn_context)
 {
-	syslog(LOG_DEBUG, "browserid_client_mech_new");
+	params->utils->log(NULL, SASL_LOG_DEBUG, "browserid_client_mech_new");
 	client_context_t *context;
 
 	context = params->utils->malloc(sizeof(client_context_t));
@@ -363,7 +359,7 @@ static int browserid_client_mech_step1(void *conn_context,
 	int result;
 	char *p;
 
-	syslog(LOG_DEBUG, "browserid_client_mech_step1");
+	params->utils->log(NULL, SASL_LOG_DEBUG, "browserid_client_mech_step1");
 
 	if (!params || !clientout || !clientoutlen || !oparams) {
 		PARAMERROR( params->utils );
@@ -425,30 +421,30 @@ static int browserid_client_mech_step1(void *conn_context,
 		return SASL_INTERACT;
 	}
 	if (strlen(browser_assertion) == 0) {
-		syslog(LOG_ERR, "browser_assertion is empty, failing");
+		params->utils->log(NULL, SASL_LOG_ERR, "browser_assertion is empty, failing");
 		return SASL_BADPARAM;
 	}
 	if (strlen(browser_assertion) > MAX_ASSERTION) {
-		syslog(LOG_ERR, "browser_assertion is larger than we expected "
+		params->utils->log(NULL, SASL_LOG_ERR, "browser_assertion is larger than we expected "
 		       "(%u), failing", strlen(browser_assertion));
 		return SASL_BADPARAM;
 	}
 	if (strlen(browser_audience) == 0) {
-		syslog(LOG_ERR, "browser_audience is empty, failing");
+		params->utils->log(NULL, SASL_LOG_ERR, "browser_audience is empty, failing");
 		return SASL_BADPARAM;
 	}
 	if (strlen(browser_audience) > MAX_AUDIENCE) {
-		syslog(LOG_ERR, "browser_audience is larger than we expected "
+		params->utils->log(NULL, SASL_LOG_ERR, "browser_audience is larger than we expected "
 		       "(%u), failing", strlen(browser_audience));
 		return SASL_BADPARAM;
 	}
-	syslog(LOG_DEBUG, "YO ASSERTION=[%s] AUDIENCE=[%s]",
+	params->utils->log(NULL, SASL_LOG_DEBUG, "YO ASSERTION=[%s] AUDIENCE=[%s]",
 	       browser_assertion, browser_audience);
 
 	/* send assertion NUL audience NUL */
 	*clientoutlen = (strlen(browser_assertion) + 1 + strlen(browser_audience) + 1);
 
-	syslog(LOG_DEBUG, "clientoutlen is going to be %u", *clientoutlen);
+	params->utils->log(NULL, SASL_LOG_DEBUG, "clientoutlen is going to be %u", *clientoutlen);
 
 	result = _plug_buf_alloc(params->utils, &(context->out_buf),
 				 &(context->out_buf_len), *clientoutlen);
@@ -491,18 +487,18 @@ static int browserid_client_mech_step2(void *conn_context,
 	char *email;
 	int result;
 
-	syslog(LOG_DEBUG, "browserid_client_mech_step2 serverinlen=%d", serverinlen);
+	params->utils->log(NULL, SASL_LOG_DEBUG, "browserid_client_mech_step2 serverinlen=%d", serverinlen);
 
 	/* should have received email NUL */
 	email = serverin;
 
 	if (strlen(email) > MAX_EMAIL) {
-		syslog(LOG_ERR, "Server sent a longer email [%u] that we "
+		params->utils->log(NULL, SASL_LOG_ERR, "Server sent a longer email [%u] that we "
 		       "expected, failing", strlen(email));
 		return SASL_BADPROT;
 	}
 
-	syslog(LOG_DEBUG, "client step2 seeing email=[%s]", email);
+	params->utils->log(NULL, SASL_LOG_DEBUG, "client step2 seeing email=[%s]", email);
 
 	result = params->canon_user(params->utils->conn, email, 0,
 			   SASL_CU_AUTHID | SASL_CU_AUTHZID, oparams);
@@ -556,7 +552,7 @@ static int browserid_client_mech_step(void *conn_context,
 							  clientoutlen,
 							  oparams);
 		default:
-			syslog(LOG_ERR, "Unknown state in client step %d", context->state);
+			params->utils->log(NULL, SASL_LOG_ERR, "Unknown state in client step %d", context->state);
 			return SASL_BADPARAM;
 	}
 }
@@ -567,7 +563,7 @@ static int browserid_client_mech_step(void *conn_context,
 static void browserid_client_mech_dispose(void *conn_context,
 					  const sasl_utils_t *utils)
 {
-	syslog(LOG_DEBUG, "browserid_client_mech_dispose");
+	utils->log(NULL, SASL_LOG_DEBUG, "browserid_client_mech_dispose");
 
 	client_context_t *context = (client_context_t *) conn_context;
 
@@ -608,8 +604,7 @@ int browserid_client_plug_init(sasl_utils_t *utils,
 			       sasl_client_plug_t **pluglist,
 			       int *plugcount)
 {
-	openlog("browserid-client", LOG_NDELAY, LOG_AUTH);
-	syslog(LOG_EMERG, "browserid_client_plug_init_plugin initialized");
+	utils->log(NULL, SASL_LOG_ERR, "browserid_client_plug_init_plugin initialized");
 	if (maxversion < SASL_CLIENT_PLUG_VERSION) {
 		SETERROR( utils, "ANONYMOUS version mismatch" );
 		return SASL_BADVERS;
