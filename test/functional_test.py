@@ -56,6 +56,7 @@ class NormalUsageTestCase(unittest.TestCase):
         cursor.close()
 
         # OpenLDAP init
+        slapd.restart_slapd()
         slapd.reset_db()
         self.ldap_conn = ldap.initialize(config.LDAP_URI)
 
